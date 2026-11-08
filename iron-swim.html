@@ -81,7 +81,16 @@ let best = null;
 try { best = parseFloat(localStorage.getItem('ironswim_best')) || null; } catch (e) {}
 
 let mode = 'title', cd = 0, T = 0, S, P = [], M = [];
-const press = { L: 0, B: 0, R: 0 };
+const press = { L: 0, R: 0, N: 0, B: 0 };
+const keyHold = { L: false, R: false };
+const ptrs = new Map();
+const held = k => keyHold[k] || [...ptrs.values()].includes(k);
+const BTNS = [
+  { k: 'L', x: 4, w: 38, col: '#e8732a' },
+  { k: 'R', x: 45, w: 38, col: '#e8732a' },
+  { k: 'N', x: 89, w: 54, col: '#2fb85a' },
+  { k: 'B', x: 146, w: 30, col: '#2aa7e8' },
+];
 const CAPS = ['#29c94a', '#f04848', '#ffe23a', '#ff8ad8', '#ffffff', '#9a6bff'];
 
 function newRun() {
@@ -109,23 +118,22 @@ function start() {
 function current(d) { return Math.sin(d / 160) * 3 + Math.sin(d / 47 + 1) * 1.2; }
 
 /* ---------- actions ---------- */
-function stroke(side) {
-  press[side] = .12;
+function swim() {
+  press.N = .12;
   if (mode !== 'play') return;
   const iv = S.lastT < 0 ? 1 : S.t - S.lastT; S.lastT = S.t;
-  const alt = S.last !== side; S.last = side;
-  let q = alt ? 1 : .55;
+  const side = S.last === 'L' ? 'R' : 'L'; S.last = side;
+  let q = 1;
   if (iv < .16) q *= .5;
   if (S.panic) q *= .45;
   if (S.stam < 20) q *= .65;
   S.v = Math.min(16, S.v + 2.1 * q);
   S.stam -= .35 + (iv < .3 ? (.3 - iv) * 7 : 0);
   const dir = side === 'L' ? -1 : 1;
-  S.vx += dir * (alt ? 12 : 28);
   if (side === 'L') { S.tL = 1; S.tR = 0; } else { S.tR = 1; S.tL = 0; }
   S.strokes++;
   splash(S.x + dir * 6, PY - 16, 5);
-  noise(.09, .1, alt ? 1600 : 900);
+  noise(.09, .1, 1400 + Math.random() * 400);
 }
 
 function breathe() {
@@ -192,7 +200,7 @@ const PHRASES = ['BOA!', 'RITMO!', 'FOCO!', 'VAMOS!', 'SEGUE!', 'FORTE!'];
 
 function update(dt) {
   T += dt;
-  for (const k in press) press[k] = Math.max(0, press[k] - dt);
+  for (const k in press) press[k] = held(k) ? .12 : Math.max(0, press[k] - dt);
 
   if (mode === 'title') {
     S.d += 2.5 * dt; S.kick += dt * 8;
@@ -216,7 +224,9 @@ function update(dt) {
     if (S.panic) S.stam -= 7 * dt;
     else S.stam = Math.min(100, S.stam + (S.v < 4 ? 2.4 : 1.5) * dt);
 
-    S.vx *= Math.exp(-2.5 * dt);
+    const steer = (held('L') ? -1 : 0) + (held('R') ? 1 : 0);
+    if (steer) S.vx += (steer * 38 - S.vx) * Math.min(1, dt * 6);
+    else S.vx *= Math.exp(-4 * dt);
     S.x += (S.vx + current(S.d)) * dt;
     S.warn -= dt;
     if (S.x < MINX || S.x > MAXX) {
@@ -421,25 +431,27 @@ function triangle(cx, cy, dir, c) {
 }
 function drawButtons() {
   R(0, BOT, W, H - BOT, '#0b1a3a'); R(0, BOT, W, 1, '#000');
-  const hintL = mode === 'play' && S.last === 'R', hintR = mode === 'play' && S.last === 'L';
   const needAir = mode === 'play' && S.oxy < 35;
-  const btns = [
-    { x: 4, k: 'L', col: '#e8732a', hi: hintL },
-    { x: 64, k: 'B', col: '#2aa7e8', hi: needAir },
-    { x: 124, k: 'R', col: '#e8732a', hi: hintR },
-  ];
-  for (const b of btns) {
-    const pr = press[b.k] > 0, w = 52, h = 46, y = BOT + 7 + (pr ? 2 : 0);
-    if (b.hi && Math.floor(T * (b.k === 'B' ? 6 : 3)) % 2) R(b.x - 2, BOT + 5, w + 4, h + 6, '#fff');
+  const idle = mode === 'play' && S.v < 2;
+  for (const b of BTNS) {
+    const pr = press[b.k] > 0, w = b.w, h = 46, y = BOT + 7 + (pr ? 2 : 0);
+    const hi = (b.k === 'B' && needAir) || (b.k === 'N' && idle);
+    if (hi && Math.floor(T * (b.k === 'B' ? 6 : 3)) % 2) R(b.x - 2, BOT + 5, w + 4, h + 6, '#fff');
     R(b.x, BOT + 9, w, h, '#000');
-    R(b.x, y, w, h - 2, pr ? '#ffffff' : b.col);
+    R(b.x, y, w, h - 2, b.col);
+    if (pr) R(b.x, y, w, h - 2, 'rgba(0,0,0,.3)');
     R(b.x + 2, y + 2, w - 4, 1, 'rgba(255,255,255,.45)');
     R(b.x, y + h - 4, w, 2, 'rgba(0,0,0,.3)');
     const cx = b.x + w / 2;
-    if (b.k === 'L') { triangle(cx, y + 13, -1, '#fff'); txt('ESQ', cx, y + 26, '#fff', 'center'); }
-    if (b.k === 'R') { triangle(cx, y + 13, 1, '#fff'); txt('DIR', cx, y + 26, '#fff', 'center'); }
+    if (b.k === 'L') triangle(cx, y + 20, -1, '#fff');
+    if (b.k === 'R') triangle(cx, y + 20, 1, '#fff');
+    if (b.k === 'N') {
+      // stroking arm icon
+      R(cx - 1, y + 6, 3, 3, '#ffd9b0'); R(cx - 1, y + 9, 3, 9, '#fff'); R(cx - 7, y + 15, 15, 3, '#fff');
+      txt('NADAR', cx, y + 26, '#fff', 'center');
+    }
     if (b.k === 'B') {
-      R(cx - 6, y + 9, 5, 5, '#e6f7ff'); R(cx + 2, y + 6, 4, 4, '#e6f7ff'); R(cx + 1, y + 13, 3, 3, '#e6f7ff');
+      R(cx - 6, y + 9, 5, 5, '#e6f7ff'); R(cx + 1, y + 6, 4, 4, '#e6f7ff'); R(cx, y + 14, 3, 3, '#e6f7ff');
       txt('AR', cx, y + 26, '#fff', 'center');
     }
   }
@@ -486,15 +498,15 @@ function draw() {
       ['Ajude o atleta a', '#fff'],
       ['nadar a prova!', '#fff'],
       ['', ''],
-      ['ALTERNE ESQ/DIR', '#ffd21a'],
-      ['para dar bracadas', '#cfe3ff'],
-      ['', ''],
+      ['SETAS p/ direcionar', '#ffb070'],
+      ['NADAR p/ impulso', '#7fe39a'],
       ['AR p/ respirar', '#5ad0ff'],
       ['', ''],
       ['Desvie de aguas-', '#ff8cf4'],
       ['vivas e atletas', '#ff8cf4'],
       ['', ''],
-      ['Teclado: A D ESPACO', '#8aa'],
+      ['Teclado: setas', '#8aa'],
+      ['ESPACO nada  W ar', '#8aa'],
     ];
     lines.forEach((l, i) => l[0] && txt(l[0], W / 2, 92 + i * 11, l[1], 'center'));
     if (best) txt('RECORDE ' + fmt(best), W / 2, 228, '#9f9', 'center');
@@ -540,25 +552,44 @@ function draw() {
 
 /* ---------- input ---------- */
 function canRestart() { return mode === 'title' || ((mode === 'win' || mode === 'fail') && S.endT > 1); }
+function btnAt(x, y) {
+  if (y < BOT) return y > TOP ? 'N' : null; // tocar na água também nada
+  let bestB = null, bd = 1e9;
+  for (const b of BTNS) { const d = Math.abs(x - (b.x + b.w / 2)) - b.w / 2; if (d < bd) { bd = d; bestB = b.k; } }
+  return bestB;
+}
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); audio();
   if (canRestart()) { start(); return; }
   const r = cv.getBoundingClientRect();
-  const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
-  if (y >= BOT) { if (x < 60) stroke('L'); else if (x < 120) breathe(); else stroke('R'); }
-  else if (y > TOP) stroke(x < W / 2 ? 'L' : 'R');
+  const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
+  if (k === 'L' || k === 'R') { ptrs.set(e.pointerId, k); try { cv.setPointerCapture(e.pointerId); } catch (_) {} }
+  else if (k === 'N') swim();
+  else if (k === 'B') breathe();
 });
+const release = e => ptrs.delete(e.pointerId);
+cv.addEventListener('pointerup', release);
+cv.addEventListener('pointercancel', release);
+cv.addEventListener('lostpointercapture', release);
 cv.addEventListener('contextmenu', e => e.preventDefault());
+const KEYS = ['arrowleft', 'arrowright', 'arrowup', ' ', 'a', 'd', 'w', 'enter'];
 addEventListener('keydown', e => {
-  if (e.repeat) return;
   const k = e.key.toLowerCase();
-  if (['arrowleft', 'arrowright', 'arrowup', ' ', 'a', 'd', 'w', 'enter'].includes(k)) e.preventDefault();
+  if (KEYS.includes(k)) e.preventDefault();
+  if (k === 'arrowleft' || k === 'a') keyHold.L = true;
+  if (k === 'arrowright' || k === 'd') keyHold.R = true;
+  if (e.repeat) return;
   audio();
   if (canRestart() && (k === ' ' || k === 'enter')) { start(); return; }
-  if (k === 'arrowleft' || k === 'a') stroke('L');
-  else if (k === 'arrowright' || k === 'd') stroke('R');
-  else if (k === ' ' || k === 'arrowup' || k === 'w') breathe();
+  if (k === ' ') swim();
+  else if (k === 'arrowup' || k === 'w') breathe();
 });
+addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'arrowleft' || k === 'a') keyHold.L = false;
+  if (k === 'arrowright' || k === 'd') keyHold.R = false;
+});
+addEventListener('blur', () => { keyHold.L = keyHold.R = false; ptrs.clear(); });
 
 /* ---------- loop ---------- */
 let lastTs = 0;
