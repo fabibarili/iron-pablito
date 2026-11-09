@@ -15,7 +15,7 @@
 <canvas id="c" width="180" height="320"></canvas>
 <script>
 (() => {
-const W = 180, H = 320, TOP = 22, BOT = 258, PY = 206, PPM = 8, GOAL = 1900;
+const W = 180, H = 320, TOP = 24, BOT = 258, PY = 206, PPM = 8, GOAL = 1900;
 const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
 let ctx = cv.getContext('2d');
@@ -102,7 +102,8 @@ function newRun() {
     d: 0, v: 0, x: 90, vx: 0, t: 0,
     last: null, lastT: -1, aL: 0, aR: 1, tL: 0, tR: 1,
     breath: 0, kick: 0, obs: [], next: 9, ck: 100,
-    hits: 0, strokes: 0, warn: 0, flash: 0, endT: 0, newBest: false
+    hits: 0, strokes: 0, warn: 0, flash: 0, endT: 0, newBest: false,
+    ent: [], go: -1, fade: 0, tut: null
   };
 }
 S = newRun();
@@ -112,25 +113,36 @@ function splash(x, y, n, col = '#ffffff') {
   for (let i = 0; i < n; i++) P.push({ x: x + rand(-2, 2), y: y + rand(-2, 2), vx: rand(-14, 14), vy: rand(-18, 4), life: rand(.25, .5), c: col });
 }
 
+// largada: Pablo e os outros atletas na areia, contagem, buzina e todo mundo corre para a água
 function start() {
   audio();
   S = newRun(); P = []; M = [];
-  mode = 'count'; cd = 3;
+  S.d = -6.5; S.fade = 1;
+  const mk = (x, od, rs, delay, sp) => ({ x, od, rs, delay, sp, cap: pick(CAPS), ph: rand(0, 6), run: 0, swim: 0 });
+  S.ent = [38, 56, 72, 108, 126, 144].map(x => mk(x, -6.5 + rand(-.15, .25), rand(5.5, 6.4), rand(0, .15), rand(5, 8)))
+    .concat([47, 64, 117, 135].map(x => mk(x, -8 + rand(-.2, .2), rand(4.6, 5), rand(.2, .4), rand(3.2, 4))));
+  mode = 'entry'; cd = 3;
   tone(440, .12);
 }
 
-
-// menu principal -> tela de instruções da etapa 1 (natação)
+// menu principal -> largada -> tutorial prático de um passo já na água, com os outros -> prova
 function openSwim() {
   press.L = press.R = .12;
-  mode = 'title'; tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+  tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+  start();
 }
+// fim (ou pulo) do tutorial: o cronômetro zera e a prova começa a valer
+function begin() {
+  mode = 'play'; S.t = 0; S.lastT = -1;
+  msg('VALENDO!', '#ffe23a'); tone(880, .3, 'square', .07);
+}
+const TUT_N = 4;
 
 /* ---------- actions ---------- */
 // cada toque é uma braçada do lado tocado: avança e puxa o nadador para aquele lado
 function swim(side) {
   press[side] = .12;
-  if (mode !== 'play') return;
+  if (mode !== 'play' && mode !== 'tut') return;
   S.lastT = S.t;
   S.last = side;
   S.v = Math.min(16, S.v + 1.1); // mais toques = mais rápido
@@ -140,6 +152,15 @@ function swim(side) {
   S.strokes++;
   splash(S.x + dir * 6, PY - 16, 5);
   noise(.09, .1, 1400 + Math.random() * 400);
+  // tutorial: só conta a braçada quando troca de lado
+  const tu = S.tut;
+  if (mode === 'tut' && !tu.done) {
+    if (side !== tu.last) {
+      tu.last = side; tu.n++;
+      tone(520 + tu.n * 90, .08, 'square', .05);
+      if (tu.n >= TUT_N) { tu.done = .001; [659, 784, 1046].forEach((f, i) => tone(f, .16, 'square', .06, 0, .1 + i * .1)); }
+    } else { tu.wrong = .9; tone(160, .12, 'square', .05, -40); }
+  }
 }
 
 /* ---------- obstacles ---------- */
@@ -189,6 +210,42 @@ function updateObs(dt) {
   S.obs = S.obs.filter(o => o.od - S.d > -22 && o.od - S.d < 90);
 }
 
+// deslize: arrasto baixo + atrito constante -> desliza rápido e vai freando até parar
+function glide(dt) {
+  S.v = Math.max(0, S.v - (S.v * .15 + .5) * dt);
+  S.vx *= Math.exp(-4 * dt);
+  S.x += S.vx * dt;
+  S.warn -= dt;
+  if (S.x < MINX || S.x > MAXX) {
+    S.x = Math.min(MAXX, Math.max(MINX, S.x));
+    S.vx = 0; S.v *= 1 - 1.5 * dt;
+    if (S.warn <= 0) { msg('SIGA AS BOIAS!', '#ff9a3a'); S.warn = 2.5; }
+  }
+  S.d += S.v * dt;
+}
+
+// atletas da largada: correm na areia, entram na água e viram nadadores da prova
+function updateEnt(dt) {
+  for (const e of S.ent) {
+    if (e.swim) {
+      // durante o tutorial o pelotão acompanha o ritmo do Pablo; na prova cada um segue o seu
+      const sp = mode === 'tut' ? S.v : e.sp;
+      e.od += sp * dt; e.ph += dt * Math.max(3, sp) * 1.1; continue;
+    }
+    e.ph += dt * (e.run ? 13 : 5);
+    if (S.go < e.delay) continue;
+    e.run = 1;
+    e.od += (e.od < -3 ? e.rs : e.rs * .65) * dt;
+    const sy = syOf(e.od);
+    if (e.od > -3 && Math.random() < dt * 18) splash(e.x + rand(-4, 4), sy + 2, 2);
+    if (e.od >= -1) { e.swim = 1; splash(e.x, sy - 8, 14); if (sy < BOT) noise(.2, .1, 900); }
+  }
+  if (mode === 'play') {
+    for (const e of S.ent) if (e.swim) S.obs.push({ k: 's', od: e.od, x: e.x, sp: e.sp, cap: e.cap, ph: e.ph, hit: 0 });
+    S.ent = S.ent.filter(e => !e.swim);
+  }
+}
+
 /* ---------- update ---------- */
 const PHRASES = ['BOA!', 'RITMO!', 'FOCO!', 'VAMOS!', 'SEGUE!', 'FORTE!'];
 
@@ -196,30 +253,37 @@ function update(dt) {
   T += dt;
   for (const k in press) press[k] = Math.max(0, press[k] - dt);
 
-  if (mode === 'title') {
-    S.d += 2.5 * dt; S.kick += dt * 8;
-    const ph = (T * 1.6) % 2;
-    S.tL = ph < 1 ? 1 : 0; S.tR = 1 - S.tL;
+  if (mode === 'tut') {
+    S.t += dt; glide(dt); updateEnt(dt);
+    const tu = S.tut;
+    tu.wrong = Math.max(0, tu.wrong - dt);
+    if (tu.done) { tu.done += dt; if (tu.done > 1.2) begin(); }
   }
-  if (mode === 'count') {
-    const prev = Math.ceil(cd);
-    cd -= dt;
-    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
-    if (cd <= 0) { mode = 'play'; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
+  if (mode === 'entry') {
+    S.fade = Math.max(0, S.fade - dt * 2.5);
+    if (cd > 0) {
+      const prev = Math.ceil(cd);
+      cd -= dt;
+      if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
+      if (cd <= 0) { S.go = 0; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
+    } else {
+      S.go += dt;
+      // corre na areia, perde velocidade na água rasa e mergulha
+      S.v = S.go < .12 ? 0 : S.d < -3 ? 5.2 : 3.4;
+      S.d += S.v * dt;
+      if (S.d > -3 && Math.random() < dt * 18) splash(S.x + rand(-4, 4), PY + 2, 2);
+      if (S.d >= -1) {
+        mode = 'tut'; S.tut = { n: 0, last: null, done: 0, wrong: 0 };
+        S.v = 7; S.tL = S.tR = S.aL = S.aR = 0;
+        splash(S.x, PY - 8, 18); noise(.3, .22, 900);
+      }
+    }
+    updateEnt(dt);
   }
   if (mode === 'play') {
     S.t += dt;
-    // deslize: arrasto baixo + atrito constante -> desliza rápido e vai freando até parar
-    S.v = Math.max(0, S.v - (S.v * .15 + .5) * dt);
-    S.vx *= Math.exp(-4 * dt);
-    S.x += S.vx * dt;
-    S.warn -= dt;
-    if (S.x < MINX || S.x > MAXX) {
-      S.x = Math.min(MAXX, Math.max(MINX, S.x));
-      S.vx = 0; S.v *= 1 - 1.5 * dt;
-      if (S.warn <= 0) { msg('SIGA AS BOIAS!', '#ff9a3a'); S.warn = 2.5; }
-    }
-    S.d += S.v * dt;
+    glide(dt);
+    updateEnt(dt);
     updateObs(dt);
 
     if (S.d >= S.ck && S.ck < GOAL) {
@@ -237,7 +301,7 @@ function update(dt) {
   if (mode === 'win') { S.endT += dt; S.v *= Math.exp(-3 * dt); }
 
   // body animation
-  const gliding = mode === 'play' && (S.lastT < 0 || S.t - S.lastT > .6);
+  const gliding = (mode === 'play' || mode === 'tut') && (S.lastT < 0 || S.t - S.lastT > .6);
   if (gliding) { S.tL = 0; S.tR = 0; } // braços estendidos à frente no deslize
   S.kick += dt * (gliding ? 1.5 : 6 + S.v * 1.2);
   S.aL += (S.tL - S.aL) * Math.min(1, dt * 14);
@@ -246,12 +310,12 @@ function update(dt) {
   S.flash = Math.max(0, S.flash - dt);
 
   // particles
-  const scroll = (mode === 'play' || mode === 'title') ? S.v * PPM : 0;
+  const scroll = (mode === 'play' || mode === 'entry' || mode === 'tut') ? S.v * PPM : 0;
   for (const p of P) {
     p.x += p.vx * dt; p.y += (p.vy + scroll) * dt; p.life -= dt;
     p.vx *= .92; if (!p.bub) p.vy += 60 * dt;
   }
-  if (mode === 'play' && S.v > 3 && Math.random() < S.v * dt * 3) {
+  if ((mode === 'play' || mode === 'tut') && S.v > 3 && Math.random() < S.v * dt * 3) {
     P.push({ x: S.x + rand(-3, 3), y: PY + 13, vx: rand(-4, 4), vy: rand(-2, 6), life: rand(.3, .6), c: '#d8f0ff', bub: 1 });
   }
   P = P.filter(p => p.life > 0);
@@ -361,6 +425,37 @@ function drawSwimmer(x, y, cap, aL, aR, breath, kick, breathSide = 1, suit = '#2
     R(fx + (breathSide > 0 ? 1 : 0), y - 7, 1, 1, '#b03030');
   } else {
     R(hx + 1, y - 12, 1, 1, '#5ad0ff'); R(hx + 4, y - 12, 1, 1, '#5ad0ff');
+  }
+}
+
+// atleta em pé visto de costas (largada). (x, y) = pés; wd = 0..1 o quanto já afundou na água
+const wadeOf = od => Math.max(0, Math.min(1, (od + 3) / 2));
+function drawRunner(x, y, cap, ph, run, wd, suit = '#34384a', pablo = false) {
+  x = Math.round(x); y = Math.round(y) - 9;
+  const skin = '#eab07a', SIL = '#c8cfd9';
+  const st = run ? (Math.sin(ph) > 0 ? 1 : -1) : 0;   // passada
+  const hop = !run && Math.sin(ph) > .75 ? 1 : 0;     // pulinho de aquecimento
+  const leg = Math.round(6 * (1 - wd));               // pernas somem conforme entra na água
+  if (wd <= 0) R(x - 3, y + 9, 9, 3, PAL.shadowSand);
+  y -= hop;
+  const L = [];
+  if (leg > 0) {
+    const l1 = Math.max(1, leg + st), l2 = Math.max(1, leg - st);
+    L.push([x - 3, y + 3, 2, l1, suit], [x + 1, y + 3, 2, l2, suit]);
+    if (wd <= 0) L.push([x - 3, y + 3 + l1, 2, 1, skin], [x + 1, y + 3 + l2, 2, 1, skin]);
+  }
+  L.push([x - 4, y - 5, 8, 8, suit]);
+  L.push([x - 6, y - 4 + st, 2, 6, suit], [x + 4, y - 4 - st, 2, 6, suit]);
+  L.push([x - 6, y + 2 + st, 2, 1, skin], [x + 4, y + 2 - st, 2, 1, skin]);
+  if (pablo) L.push([x - 4, y - 5, 8, 3, SIL], [x - 6, y - 4 + st, 2, 3, SIL], [x + 4, y - 4 - st, 2, 3, SIL]);
+  L.push([x - 3, y - 11, 6, 6, cap]);
+  spr(L);
+  if (pablo) { R(x - 3, y - 5, 6, 1, '#eef1f5'); R(x - 1, y - 2, 2, 5, '#34333e'); }
+  else { R(x - 3, y - 5, 6, 1, '#4a4462'); R(x - 4, y + 1, 8, 1, '#e8732a'); }
+  R(x - 2, y - 10, 2, 1, 'rgba(255,255,255,.7)'); R(x - 3, y - 6, 6, 1, 'rgba(0,0,0,.22)');
+  if (wd > 0) {
+    const fy = y + 3 + leg, f = Math.floor(T * 8 + x) % 2;
+    R(x - 6 - f, fy, 12 + f * 2, 1, PAL.foam); R(x - 4 + f, fy + 1, 8, 1, PAL.foam2);
   }
 }
 
@@ -494,10 +589,13 @@ function drawShores() {
     R(0, s0, W, Math.max(0, BOT - s0), PAL.sand);
     sandTex(s0, 1, 70, 1);
     shoreline(s0, 1);
-    starfish(30, s0 + 10); shell(52, s0 + 18); shell(150, s0 + 6);
-    towel(122, s0 + 7, '#5ad0ff', '#fff');
-    umbrella(148, s0 + 17, 8, '#e8504a', '#f6efe6');
-    txt('LARGADA', W / 2, s0 + 10, '#fff', 'center');
+    starfish(22, s0 + 20); shell(52, s0 + 18); shell(150, s0 + 6);
+    // tapete e faixa da largada, atrás dos atletas
+    R(25, s0 + 38, 130, 8, OUT); R(26, s0 + 39, 128, 6, '#3a5fd0'); R(26, s0 + 39, 128, 1, '#5a80ea');
+    for (let i = 0; i < 16; i++) R(26 + i * 8 + (i % 2 ? 0 : 4), s0 + 42, 4, 2, '#fff');
+    txt('LARGADA', W / 2, s0 + 54, '#fff', 'center');
+    towel(16, s0 + 58, '#5ad0ff', '#fff');
+    umbrella(160, s0 + 64, 8, '#e8504a', '#f6efe6');
     palm(10, s0 + 4, 1);
     palm(172, s0 + 8, -1);
   }
@@ -588,18 +686,47 @@ function drawKayaks() {
   }
 }
 
+const chip = (x, y, w, h) => { rrect(x, y, w, h, '#17122a'); R(x + 2, y + h - 1, w - 4, 1, '#3b2f5a'); };
+const PACE = ['#4fd0dc', '#5fe08a', '#ffe23a', '#ff9a3a', '#ff5a4a'];
 function drawHUD() {
-  R(0, 0, W, TOP, '#2a2140'); R(0, TOP - 1, W, 1, OUT);
-  txt(Math.floor(S.d) + '/' + GOAL + 'm', 4, 3, '#fff');
-  txt(fmt(S.t), W - 3, 3, '#8ae3de', 'right');
-  const p = S.d / GOAL;
-  R(3, 12, W - 6, 6, OUT);
-  R(4, 13, W - 8, 4, '#463a68');
-  R(4, 13, Math.round((W - 8) * p), 4, '#4fd0dc');
-  R(4, 13, Math.round((W - 8) * p), 1, '#a6f0ee');
-  for (let i = 1; i < 19; i++) R(4 + Math.round((W - 8) * i / 19), 13, 1, 4, 'rgba(46,36,69,.45)');
-  R(3 + Math.round((W - 9) * p), 10, 4, 10, OUT); R(4 + Math.round((W - 9) * p), 11, 2, 8, '#ff9a3a');
+  R(0, 0, W, TOP, '#2a2140'); R(0, 0, W, 1, '#4a3d70'); R(0, TOP - 1, W, 1, OUT);
+  const tut = mode === 'tut';
+  const d = Math.max(0, Math.min(GOAL, S.d)), p = d / GOAL;
+  if (tut) {
+    chip(2, 2, 56, 12); txt('TREINO', 6, 4, '#ffe23a');
+    const pr = Math.floor(T * 2) % 2;
+    rrect(119, 2, 59, 12, pr ? '#4a3d70' : '#3b2f5a'); R(121, 13, 55, 1, '#17122a');
+    txt('PULAR>', 124, 4, '#fff');
+  } else {
+    // distância (ícone de boia)
+    chip(2, 2, 58, 12);
+    disc(8, 8, 3, OUT); disc(8, 8, 2, '#ff7a2a'); R(7, 7, 1, 1, '#ffd0a0'); R(6, 9, 5, 1, '#f6f0e8');
+    txt(Math.floor(d) + 'm', 14, 4, '#fff');
+    // ritmo: 5 barrinhas que acendem com a velocidade
+    const lit = mode === 'play' ? Math.ceil(S.v / 16 * 5 - .15) : 0;
+    for (let i = 0; i < 5; i++) {
+      const h = 3 + i * 2, x = 69 + i * 9;
+      R(x - 1, 13 - h - 1, 9, h + 2, OUT);
+      R(x, 13 - h, 7, h, i < lit ? PACE[i] : '#463a68');
+      if (i < lit) R(x, 13 - h, 7, 1, 'rgba(255,255,255,.5)');
+    }
+    // tempo (ícone de relógio)
+    chip(118, 2, 60, 12);
+    disc(123, 8, 3, '#8ae3de'); disc(123, 8, 2, '#17122a'); R(123, 6, 1, 3, '#8ae3de'); R(123, 8, 2, 1, '#8ae3de');
+    txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
+  }
+  // percurso: trilha com marcas a cada 500m, bandeira quadriculada e a touca do Pablo
+  const x0 = 7, len = 156, fx = x0 + Math.round(len * p);
+  R(x0 - 1, 17, len + 2, 5, OUT);
+  R(x0, 18, len, 3, '#463a68'); R(x0, 20, len, 1, '#3b2f5a');
+  R(x0, 18, fx - x0, 3, '#4fd0dc'); R(x0, 18, fx - x0, 1, '#a6f0ee');
+  for (let m = 500; m < GOAL; m += 500) R(x0 + Math.round(len * m / GOAL), 18, 1, 3, m <= d ? '#2b88ad' : '#6b5a9a');
+  R(x0 + len + 2, 15, 1, 8, OUT); R(x0 + len + 3, 15, 7, 6, OUT);
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) R(x0 + len + 3 + i, 16 + j, 1, 1, ((i >> 1) + (j >> 1)) % 2 ? '#fff' : '#2a2140');
+  disc(fx, 19, 3, OUT); disc(fx, 19, 2, '#ff7a1a'); R(fx - 1, 18, 1, 1, '#ffb35a');
 }
+// sombra da barra sobre a água
+function hudShadow() { R(0, TOP, W, 1, 'rgba(30,22,52,.4)'); R(0, TOP + 1, W, 1, 'rgba(30,22,52,.18)'); }
 
 // retângulo com cantos arredondados em pixel
 function rrect(x, y, w, h, c) {
@@ -628,7 +755,8 @@ function drawButtons() {
   for (const b of BTNS) {
     const pr = press[b.k] > 0, off = pr ? 4 : 0, x = b.x, w = b.w, fy = Y0 + off;
     // brilho piscando quando está parado (alterna ESQ/DIR)
-    if (idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1)) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#fff');
+    const tutNext = mode === 'tut' && !S.tut.done && (S.tut.last === 'L' ? 'R' : 'L') === b.k;
+    if ((idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1)) || (tutNext && Math.floor(T * 4) % 2)) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#fff');
     // sombra no painel, contorno, lateral 3D e face
     rrect(x + 1, Y0 + 3, w, FH + DEPTH, 'rgba(10,6,24,.45)');
     rrect(x - 1, fy - 1, w + 2, FH + DEPTH + 2 - off, OUT);
@@ -999,44 +1127,63 @@ function draw() {
     const c = (o.ph % 2) < 1;
     drawSwimmer(o.x, syOf(o.od), o.cap, c ? .9 : .1, c ? .1 : .9, 0, o.ph * 3, 1, '#34384a');
   }
-  drawSwimmer(S.x, PY, '#ff7a1a', S.aL, S.aR, 0, S.kick, 1, '#201f28', true);
+  const drawEnt = e => {
+    const sy = syOf(e.od);
+    if (sy < TOP - 20 || sy > BOT + 24) return;
+    if (e.swim) { const c = (e.ph % 2) < 1; drawSwimmer(e.x, sy, e.cap, c ? .9 : .1, c ? .1 : .9, 0, e.ph * 3, 1, '#34384a'); }
+    else drawRunner(e.x, sy, e.cap, e.ph, e.run, wadeOf(e.od));
+  };
+  S.ent.filter(e => e.od >= S.d).forEach(drawEnt);
+  if (mode === 'entry') drawRunner(S.x, PY, '#ff7a1a', S.kick, S.go > .12, wadeOf(S.d), '#201f28', true);
+  else drawSwimmer(S.x, PY, '#ff7a1a', S.aL, S.aR, 0, S.kick, 1, '#201f28', true);
+  S.ent.filter(e => e.od < S.d).forEach(drawEnt);
   for (const p of P) R(p.x, p.y, 1, 1, p.c);
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
-  M.forEach((m, i) => { if (m.life > .3 || Math.floor(T * 10) % 2) txt(m.t, W / 2, TOP + 8 + i * 12, m.c, 'center'); });
+  M.forEach((m, i) => {
+    if (m.life <= .3 && Math.floor(T * 10) % 2 === 0) return;
+    const w = m.t.length * 8 + 8, y = TOP + 8 + i * 15;
+    rrect(Math.round(W / 2 - w / 2), y - 3, w, 13, 'rgba(30,22,52,.6)');
+    txt(m.t, W / 2, y, m.c, 'center');
+  });
+  hudShadow();
   ctx.restore();
 
   drawHUD();
   drawButtons();
 
-  if (mode === 'title') {
-    overlay(.62);
-    panel(34, 214);
-    txt('ETAPA 1', W / 2, 44, '#ffe23a', 'center');
-    txt('NATACAO', W / 2, 56, '#ff9a1a', 'center', 16);
-    txt('1,9 KM', W / 2, 75, '#3fd0ff', 'center');
-    const lines = [
-      ['Ajude o Pablo a', '#fff'],
-      ['nadar a prova!', '#fff'],
-      ['', ''],
-      ['Toque ESQ e DIR', '#ffb070'],
-      ['p/ dar bracadas', '#ffb070'],
-      ['Mais toques = mais', '#7fe39a'],
-      ['rapido!', '#7fe39a'],
-      ['So de um lado', '#5ad0ff'],
-      ['vira p/ ele', '#5ad0ff'],
-      ['Desvie de aguas-', '#ff8cf4'],
-      ['vivas e atletas', '#ff8cf4'],
-      ['Teclado: setas', '#8aa'],
-    ];
-    lines.forEach((l, i) => l[0] && txt(l[0], W / 2, 92 + i * 11, l[1], 'center'));
-    if (best) txt('RECORDE ' + fmt(best), W / 2, 228, '#9f9', 'center');
-    if (Math.floor(T * 2) % 2) txt('TOQUE P/ COMECAR', W / 2, 262 - 26, '#fff', 'center');
+  if (mode === 'tut') {
+    const tu = S.tut, ok = tu.done > 0;
+    panel(TOP + 8, 60);
+    txt(ok ? 'BOA, PABLO!' : 'COMO NADAR', W / 2, TOP + 16, '#ffe23a', 'center');
+    if (ok) txt('Agora e pra valer!', W / 2, TOP + 32, '#fff', 'center');
+    else if (tu.wrong > 0) txt('Agora o outro lado!', W / 2, TOP + 32, '#ff9a6a', 'center');
+    else {
+      txt('Alterne ESQ e DIR', W / 2, TOP + 28, '#fff', 'center');
+      txt('para dar bracadas', W / 2, TOP + 38, '#fff', 'center');
+    }
+    // progresso: uma casinha por braçada alternada
+    for (let i = 0; i < TUT_N; i++) {
+      const x = W / 2 - TUT_N * 7 + i * 14 + 1, y = TOP + 51, on = i < tu.n;
+      R(x, y, 12, 9, OUT); R(x + 1, y + 1, 10, 7, on ? '#3cc45a' : '#2a2140');
+      if (on) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
+    }
+    // seta quicando em cima do botão da vez
+    if (!ok) {
+      const cx = (tu.last === 'L' ? BTNS[1] : BTNS[0]).x + 41, ay = BOT - 22 + Math.round(Math.abs(Math.sin(T * 6)) * 4);
+      const AR = ['.ooooo.', '.owwwo.', '.owwwo.', 'oowwwoo', 'owwwwwo', '.owwwo.', '..owo..', '...o...'];
+      for (let r = 0; r < AR.length; r++) for (let c = 0; c < 7; c++) {
+        const ch = AR[r][c]; if (ch !== '.') R(cx - 7 + c * 2, ay + r * 2, 2, 2, ch === 'o' ? OUT : '#fff');
+      }
+    }
   }
-  if (mode === 'count') {
-    overlay(.35);
-    const n = Math.ceil(cd);
-    txt(String(n), W / 2, 110, '#ffe23a', 'center', 32);
-    txt('PREPARE-SE', W / 2, 152, '#fff', 'center');
+  if (mode === 'entry') {
+    if (cd > 0) {
+      const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
+      bigTxt(String(n), W / 2 + 2, 62 - pop, '#ffe23a', 32, '#fff6b0');
+      txt('PREPARE-SE', W / 2, 104, '#fff', 'center');
+      if (best) txt('RECORDE ' + fmt(best), W / 2, 118, '#9f9', 'center');
+    }
+    if (S.fade > 0) overlay(S.fade);
   }
   if (mode === 'win') {
     overlay(Math.min(.75, S.endT));
@@ -1059,12 +1206,9 @@ function draw() {
 }
 
 /* ---------- input ---------- */
-function canRestart() { return mode === 'title' || (mode === 'win' && S.endT > 1); }
-// título (instruções) -> começa a etapa; fim da etapa -> volta ao menu já na próxima etapa
-function advance() {
-  if (mode === 'win') { mode = 'menu'; msel = 1; S = newRun(); P = []; M = []; tone(660, .08); }
-  else start();
-}
+function canRestart() { return mode === 'win' && S.endT > 1; }
+// fim da etapa -> volta ao menu já na próxima etapa
+function advance() { mode = 'menu'; msel = 1; S = newRun(); P = []; M = []; tone(660, .08); }
 function btnAt(x, y) {
   if (y < TOP) return null;
   return x < W / 2 ? 'L' : 'R'; // metade esquerda/direita da tela (água ou botões)
@@ -1074,6 +1218,7 @@ cv.addEventListener('pointerdown', e => {
   const r = cv.getBoundingClientRect();
   if (mode === 'menu') { menuTap((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height); return; }
   if (canRestart()) { advance(); return; }
+  if (mode === 'tut' && (e.clientY - r.top) * H / r.height < TOP) { if ((e.clientX - r.left) * W / r.width > W / 2) begin(); return; }
   const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
   if (k) swim(k);
 });
@@ -1091,6 +1236,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { advance(); return; }
+  if (mode === 'tut' && (k === ' ' || k === 'enter')) { begin(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
   else if (k === 'arrowright' || k === 'd') swim('R');
 });
