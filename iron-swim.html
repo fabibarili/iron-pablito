@@ -128,7 +128,7 @@ function swim() {
   let q = 1;
   if (iv < .16) q *= .5;
   if (S.stam < 20) q *= .65;
-  S.v = Math.min(16, S.v + 2.1 * q);
+  S.v = Math.min(16, S.v + 1.1 * q); // cada braçada soma pouco: a velocidade cresce aos poucos
   S.stam -= .35 + (iv < .3 ? (.3 - iv) * 7 : 0);
   const dir = side === 'L' ? -1 : 1;
   if (side === 'L') { S.tL = 1; S.tR = 0; } else { S.tR = 1; S.tL = 0; }
@@ -141,8 +141,8 @@ function breathe() {
   press.B = .12;
   if (mode !== 'play' || S.breath > 0) return;
   S.breath = .45;
-  if (S.oxy > 80) { S.v *= .85; msg('CEDO DEMAIS', '#9cf'); }
-  else { if (S.panic) msg('UFA!', '#9f9'); S.v *= .8; }
+  if (S.oxy > 80) { S.v *= .9; msg('CEDO DEMAIS', '#9cf'); }
+  else { if (S.panic) msg('UFA!', '#9f9'); S.v *= .93; }
   S.oxy = 100; S.panic = false;
   const side = S.last === 'L' ? -1 : 1;
   for (let i = 0; i < 6; i++) P.push({ x: S.x + side * 5, y: PY - 9, vx: rand(-6, 6) + side * 8, vy: rand(-10, -2), life: rand(.4, .8), c: '#bfe8ff', bub: 1 });
@@ -216,7 +216,8 @@ function update(dt) {
   }
   if (mode === 'play') {
     S.t += dt;
-    S.v = Math.max(0, S.v - S.v * .6 * dt);
+    // deslize: arrasto baixo + atrito constante -> desliza rápido e vai freando até parar
+    S.v = Math.max(0, S.v - (S.v * .15 + .5) * dt);
     // fôlego: só gasta enquanto o jogador está dando taps em NADAR (~7s de taps)
     const tapping = S.lastT >= 0 && S.t - S.lastT < .6;
     if (tapping && !S.panic) S.oxy -= (100 / 7) * dt;
@@ -255,7 +256,9 @@ function update(dt) {
   if (mode === 'win' || mode === 'fail') { S.endT += dt; S.v *= Math.exp(-3 * dt); if (mode === 'fail') S.d += S.v * dt; }
 
   // body animation
-  S.kick += dt * (6 + S.v * 1.2);
+  const gliding = mode === 'play' && (S.lastT < 0 || S.t - S.lastT > .6);
+  if (gliding) { S.tL = 0; S.tR = 0; } // braços estendidos à frente no deslize
+  S.kick += dt * (gliding ? 1.5 : 6 + S.v * 1.2);
   S.aL += (S.tL - S.aL) * Math.min(1, dt * 14);
   S.aR += (S.tR - S.aR) * Math.min(1, dt * 14);
   S.breath = Math.max(0, S.breath - dt);
