@@ -121,11 +121,12 @@ function current(d) { return Math.sin(d / 160) * 3 + Math.sin(d / 47 + 1) * 1.2;
 function swim() {
   press.N = .12;
   if (mode !== 'play') return;
+  if (S.panic) { press.B = .12; tone(110, .08, 'square', .05); return; } // sem fôlego: NADAR travado
+  if (S.breath > 0) return;
   const iv = S.lastT < 0 ? 1 : S.t - S.lastT; S.lastT = S.t;
   const side = S.last === 'L' ? 'R' : 'L'; S.last = side;
   let q = 1;
   if (iv < .16) q *= .5;
-  if (S.panic) q *= .45;
   if (S.stam < 20) q *= .65;
   S.v = Math.min(16, S.v + 2.1 * q);
   S.stam -= .35 + (iv < .3 ? (.3 - iv) * 7 : 0);
@@ -216,13 +217,15 @@ function update(dt) {
   if (mode === 'play') {
     S.t += dt;
     S.v = Math.max(0, S.v - S.v * .6 * dt);
-    S.oxy -= 8.5 * dt;
-    if (S.oxy <= 0) {
-      S.oxy = 0;
-      if (!S.panic) { S.panic = true; msg('SEM AR! RESPIRE!', '#ff5050'); tone(200, .3, 'square', .07, -100); }
+    // fôlego: só gasta enquanto o jogador está dando taps em NADAR (~7s de taps)
+    const tapping = S.lastT >= 0 && S.t - S.lastT < .6;
+    if (tapping && !S.panic) S.oxy -= (100 / 7) * dt;
+    if (S.oxy <= 0 && !S.panic) {
+      S.oxy = 0; S.panic = true;
+      msg('SEM FOLEGO!', '#ff5050'); msg('APERTE AR', '#5ad0ff');
+      tone(200, .3, 'square', .07, -100);
     }
-    if (S.panic) S.stam -= 7 * dt;
-    else S.stam = Math.min(100, S.stam + (S.v < 4 ? 2.4 : 1.5) * dt);
+    S.stam = Math.min(100, S.stam + (S.v < 4 ? 2.4 : 1.5) * dt);
 
     const steer = (held('L') ? -1 : 0) + (held('R') ? 1 : 0);
     if (steer) S.vx += (steer * 38 - S.vx) * Math.min(1, dt * 6);
@@ -431,8 +434,8 @@ function triangle(cx, cy, dir, c) {
 }
 function drawButtons() {
   R(0, BOT, W, H - BOT, '#0b1a3a'); R(0, BOT, W, 1, '#000');
-  const needAir = mode === 'play' && S.oxy < 35;
-  const idle = mode === 'play' && S.v < 2;
+  const needAir = mode === 'play' && (S.oxy < 35 || S.panic);
+  const idle = mode === 'play' && S.v < 2 && !S.panic;
   for (const b of BTNS) {
     const pr = press[b.k] > 0, w = b.w, h = 46, y = BOT + 7 + (pr ? 2 : 0);
     const hi = (b.k === 'B' && needAir) || (b.k === 'N' && idle);
@@ -480,7 +483,7 @@ function draw() {
       const s = c > 0 ? 'CORRENTE >>' : '<< CORRENTE';
       txt(s, W / 2, BOT - 12, 'rgba(200,235,255,.85)', 'center');
     }
-    if (S.panic && Math.floor(T * 5) % 2) txt('RESPIRE!', W / 2, PY - 40, '#ff5050', 'center');
+    if (S.panic && Math.floor(T * 5) % 2) txt('APERTE AR!', W / 2, PY - 40, '#5ad0ff', 'center');
   }
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
   M.forEach((m, i) => { if (m.life > .3 || Math.floor(T * 10) % 2) txt(m.t, W / 2, TOP + 8 + i * 12, m.c, 'center'); });
@@ -500,7 +503,7 @@ function draw() {
       ['', ''],
       ['SETAS p/ direcionar', '#ffb070'],
       ['NADAR p/ impulso', '#7fe39a'],
-      ['AR p/ respirar', '#5ad0ff'],
+      ['Folego acaba: AR', '#5ad0ff'],
       ['', ''],
       ['Desvie de aguas-', '#ff8cf4'],
       ['vivas e atletas', '#ff8cf4'],
