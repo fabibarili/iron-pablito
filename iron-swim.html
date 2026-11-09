@@ -79,6 +79,15 @@ function noise(d = .1, vol = .12, freq = 1200) {
 /* ---------- state ---------- */
 let best = null;
 try { best = parseFloat(localStorage.getItem('ironswim_best')) || null; } catch (e) {}
+// progresso: quantas etapas estão liberadas (1 = só natação). Concluir uma etapa libera a próxima
+let unlocked = 1;
+try { unlocked = Math.max(1, Math.min(3, parseInt(localStorage.getItem('iron703_unlocked')) || 1)); } catch (e) {}
+function unlockStage(n) {
+  if (n <= unlocked) return false;
+  unlocked = Math.min(3, n);
+  try { localStorage.setItem('iron703_unlocked', String(unlocked)); } catch (e) {}
+  return true;
+}
 
 let mode = 'menu', cd = 0, T = 0, S, P = [], M = [];
 const press = { L: 0, R: 0 };
@@ -220,6 +229,7 @@ function update(dt) {
     }
     if (S.d >= GOAL) {
       S.d = GOAL; mode = 'win'; S.endT = 0;
+      S.unlockedNow = unlockStage(2);
       if (!best || S.t < best) { best = S.t; S.newBest = true; try { localStorage.setItem('ironswim_best', String(best)); } catch (e) {} }
       [523, 659, 784, 1046].forEach((f, i) => tone(f, .25, 'square', .06, 0, i * .14));
     }
@@ -936,35 +946,43 @@ function drawMenu() {
   // setas para trocar de etapa
   if (Math.floor(T * 2) % 2) { txt('<', 5, 150, '#fff'); txt('>', W - 13, 150, '#fff'); }
 
-  // etapa selecionada + trilha das 3 etapas
-  const open = STAGES[msel][2];
-  txt('ETAPA ' + (msel + 1) + ': ' + STAGES[msel][0], W / 2, 240, '#fff', 'center');
-  R(20, 259, W - 40, 2, '#141c3c');
-  STAGES.forEach(([, dist, op], i) => {
-    const x = 8 + i * 58, y = 252;
+  // nome da etapa selecionada + trilha das 3 distâncias (cadeado nas bloqueadas)
+  const unl = msel < unlocked, open = unl && STAGES[msel][2];
+  txt(STAGES[msel][0], W / 2, 238, '#fff', 'center');
+  R(20, 263, W - 40, 2, '#141c3c');
+  STAGES.forEach(([, dist], i) => {
+    const op = i < unlocked;
+    const x = 8 + i * 58, y = 256;
     if (i === msel) rrect(x - 2, y - 2, 54, 18, '#fff');
     rrect(x - 1, y - 1, 52, 16, OUT);
     rrect(x, y, 50, 14, op ? '#e8732a' : '#ecd29a');
     if (op) { R(x + 2, y + 1, 46, 1, '#ffb070'); R(x + 2, y + 12, 46, 1, '#c85a22'); }
     else R(x + 2, y + 12, 46, 1, '#d8b878');
-    txt(dist, x + 25, y + 3, op ? '#fff' : '#b08a50', 'center');
+    if (op) txt(dist, x + 25, y + 3, '#fff', 'center');
+    else lockIcon(x + 22, y + 2, '#8a6a3a');
   });
 
-  // botão iniciar (cinza "EM BREVE" nas etapas bloqueadas)
-  const pr = open && (press.L > 0 || press.R > 0) ? 3 : 0, bw = 140, bx = (W - bw) / 2, by = 280;
-  if (open && Math.floor(T * 2.5) % 2) rrect(bx - 3, by - 3 + pr, bw + 6, 36 - pr, '#fff');
-  rrect(bx - 1, by - 1 + pr, bw + 2, 33 - pr, OUT);
-  rrect(bx, by + 4, bw, 27, open ? '#a8522a' : '#5a5470');
-  rrect(bx, by + pr, bw, 27, open ? '#f39a3c' : '#8a84a0');
-  R(bx + 3, by + 1 + pr, bw - 6, 2, open ? '#ffc86e' : '#aaa4c0'); R(bx + 2, by + 3 + pr, 2, 18, open ? '#ffc86e' : '#aaa4c0');
-  R(bx + 3, by + 24 + pr, bw - 6, 2, open ? '#d8782e' : '#746e8c');
-  if (open) bigTxt('INICIAR', W / 2, by + 6 + pr, '#fff', 16, '#ffe7c0');
-  else bigTxt('EM BREVE', W / 2, by + 6, '#dcd8ea', 16);
+  // botão iniciar (30% menor; cinza nas etapas bloqueadas ou ainda sem fase)
+  const pr = open && (press.L > 0 || press.R > 0) ? 2 : 0, bw = 98, bh = 19, bx = (W - bw) / 2, by = 284;
+  if (open && Math.floor(T * 2.5) % 2) rrect(bx - 3, by - 3 + pr, bw + 6, bh + 9 - pr, '#fff');
+  rrect(bx - 1, by - 1 + pr, bw + 2, bh + 5 - pr, OUT);
+  rrect(bx, by + 3, bw, bh, open ? '#1f7a3a' : '#5a5470');
+  rrect(bx, by + pr, bw, bh, open ? '#3cc45a' : '#8a84a0');
+  R(bx + 3, by + 1 + pr, bw - 6, 1, open ? '#8cf09a' : '#aaa4c0'); R(bx + 1, by + 3 + pr, 1, bh - 7, open ? '#8cf09a' : '#aaa4c0');
+  R(bx + 3, by + bh - 2 + pr, bw - 6, 1, open ? '#2a9e48' : '#746e8c');
+  if (open) txt('INICIAR', W / 2, by + 6 + pr, '#fff', 'center');
+  else if (unl) txt('EM BREVE', W / 2, by + 6, '#f0ecfa', 'center');
+  else { lockIcon(bx + 8, by + 5, '#f0ecfa'); txt('BLOQUEADA', W / 2 + 6, by + 6, '#f0ecfa', 'center'); }
+}
+// cadeado de 7x9 px
+function lockIcon(x, y, c) {
+  R(x + 2, y, 3, 1, c); R(x + 1, y + 1, 1, 3, c); R(x + 5, y + 1, 1, 3, c);
+  R(x, y + 4, 7, 5, c); R(x + 3, y + 5, 1, 2, OUT);
 }
 // toque no menu: pílulas escolhem a etapa, botão inicia, laterais trocam de etapa
 function menuTap(x, y) {
-  if (y >= 276) { if (STAGES[msel][2]) openSwim(); else tone(160, .15, 'square', .05, -40); return; }
-  if (y >= 248) msel = Math.max(0, Math.min(2, Math.floor((x - 8) / 58)));
+  if (y >= 280) { if (msel < unlocked && STAGES[msel][2]) openSwim(); else tone(160, .15, 'square', .05, -40); return; }
+  if (y >= 246) msel = Math.max(0, Math.min(2, Math.floor((x - 8) / 58)));
   else msel = (msel + (x < W / 2 ? 2 : 1)) % 3;
   tone(520, .05, 'square', .04);
 }
@@ -1035,13 +1053,19 @@ function draw() {
       txt('Batidas ' + S.hits, W / 2, 178, '#cfe3ff', 'center');
       if (S.newBest) txt('NOVO RECORDE!', W / 2, 196, '#9f9', 'center');
       else if (best) txt('Recorde ' + fmt(best), W / 2, 196, '#9f9', 'center');
-      if (S.endT > 1 && Math.floor(T * 2) % 2) txt('T1 TE ESPERA! TOQUE', W / 2, 232, '#fff', 'center');
+      if (S.unlockedNow) txt('CICLISMO LIBERADO!', W / 2, 208, '#ffe23a', 'center');
+      if (S.endT > 1 && Math.floor(T * 2) % 2) txt('TOQUE P/ CONTINUAR', W / 2, 232, '#fff', 'center');
     }
   }
 }
 
 /* ---------- input ---------- */
 function canRestart() { return mode === 'title' || (mode === 'win' && S.endT > 1); }
+// título (instruções) -> começa a etapa; fim da etapa -> volta ao menu já na próxima etapa
+function advance() {
+  if (mode === 'win') { mode = 'menu'; msel = 1; S = newRun(); P = []; M = []; tone(660, .08); }
+  else start();
+}
 function btnAt(x, y) {
   if (y < TOP) return null;
   return x < W / 2 ? 'L' : 'R'; // metade esquerda/direita da tela (água ou botões)
@@ -1050,7 +1074,7 @@ cv.addEventListener('pointerdown', e => {
   e.preventDefault(); audio();
   const r = cv.getBoundingClientRect();
   if (mode === 'menu') { menuTap((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height); return; }
-  if (canRestart()) { start(); return; }
+  if (canRestart()) { advance(); return; }
   const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
   if (k) swim(k);
 });
@@ -1067,7 +1091,7 @@ addEventListener('keydown', e => {
     else if (k === ' ' || k === 'enter') menuTap(W / 2, 290);
     return;
   }
-  if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { start(); return; }
+  if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { advance(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
   else if (k === 'arrowright' || k === 'd') swim('R');
 });
