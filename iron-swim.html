@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Iron Swim 1,9 km</title>
+<title>Iron 70.3</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;height:100%;background:#1d1830;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -18,7 +18,7 @@
 const W = 180, H = 320, TOP = 22, BOT = 258, PY = 206, PPM = 8, GOAL = 1900;
 const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
+let ctx = cv.getContext('2d');
 const FONT = '"Press Start 2P", monospace';
 
 function fit() {
@@ -80,7 +80,7 @@ function noise(d = .1, vol = .12, freq = 1200) {
 let best = null;
 try { best = parseFloat(localStorage.getItem('ironswim_best')) || null; } catch (e) {}
 
-let mode = 'title', cd = 0, T = 0, S, P = [], M = [];
+let mode = 'menu', cd = 0, T = 0, S, P = [], M = [];
 const press = { L: 0, R: 0 };
 const BTNS = [
   { k: 'L', x: 5, w: 82, col: '#f39a3c', lt: '#ffc86e', md: '#d8782e', dk: '#a8522a', plate: '#c8662a' },
@@ -110,6 +110,12 @@ function start() {
   tone(440, .12);
 }
 
+
+// menu principal -> tela de instruções da etapa 1 (natação)
+function openSwim() {
+  press.L = press.R = .12;
+  mode = 'title'; tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+}
 
 /* ---------- actions ---------- */
 // cada toque é uma braçada do lado tocado: avança e puxa o nadador para aquele lado
@@ -298,13 +304,14 @@ function drawJelly(x, y, ph, hit) {
   drawPattern(JELLY, hit ? JC_HIT : JC, x, y);
 }
 
-function armRects(L, x, y, dir, a, suit, skin) {
+// up = cor do ombro até o cotovelo (neoprene do Pablo: prata em cima, antebraço preto)
+function armRects(L, x, y, dir, a, suit, skin, up) {
   const sx = dir < 0 ? x - 6 : x + 4;
-  if (a < .33) { L.push([sx, y - 15, 2, 11, suit], [sx, y - 17, 2, 2, skin]); }
-  else if (a < .66) { L.push([dir < 0 ? x - 12 : x + 4, y - 5, 8, 2, suit], [dir < 0 ? x - 14 : x + 12, y - 5, 2, 2, skin]); }
-  else { L.push([sx, y - 4, 2, 10, suit], [sx, y + 6, 2, 2, skin]); }
+  if (a < .33) { L.push([sx, y - 15, 2, 11, suit], [sx, y - 17, 2, 2, skin]); if (up) L.push([sx, y - 9, 2, 5, up]); }
+  else if (a < .66) { L.push([dir < 0 ? x - 12 : x + 4, y - 5, 8, 2, suit], [dir < 0 ? x - 14 : x + 12, y - 5, 2, 2, skin]); if (up) L.push([dir < 0 ? x - 8 : x + 4, y - 5, 4, 2, up]); }
+  else { L.push([sx, y - 4, 2, 10, suit], [sx, y + 6, 2, 2, skin]); if (up) L.push([sx, y - 4, 2, 5, up]); }
 }
-function drawSwimmer(x, y, cap, aL, aR, breath, kick, breathSide = 1, suit = '#231f30') {
+function drawSwimmer(x, y, cap, aL, aR, breath, kick, breathSide = 1, suit = '#231f30', pablo = false) {
   x = Math.round(x); y = Math.round(y);
   const skin = '#eab07a';
   // sombra no fundo
@@ -319,14 +326,22 @@ function drawSwimmer(x, y, cap, aL, aR, breath, kick, breathSide = 1, suit = '#2
     [x - 3, y + 11 + k, 2, 1, skin], [x + 1, y + 12 - k, 2, 1, skin],
     [x - 4, y - 5, 8, 10, suit],
   ];
-  armRects(L, x, y, -1, aL, suit, skin); armRects(L, x, y, 1, aR, suit, skin);
+  const SIL = '#c8cfd9', up = pablo ? SIL : null;
+  if (pablo) L.push([x - 4, y - 5, 8, 4, SIL], [x - 3, y + 9 + k, 2, 2, SIL], [x + 1, y + 10 - k, 2, 2, SIL]);
+  armRects(L, x, y, -1, aL, suit, skin, up); armRects(L, x, y, 1, aR, suit, skin, up);
   const hx = breath > 0 ? x - 3 + breathSide : x - 3;
   L.push([hx, y - 11, 6, 6, cap]);
   spr(L);
   // detalhes do macacão
-  R(x - 4, y - 5, 1, 10, '#4a4462'); R(x - 3, y - 5, 6, 1, '#4a4462');
-  R(x - 1, y - 2, 2, 5, '#363048');
-  R(x - 4, y + 1, 8, 1, '#e8732a');
+  if (pablo) {
+    // ombros prata com brilho, zíper nas costas e resto preto
+    R(x - 4, y - 5, 1, 4, '#eef1f5'); R(x - 3, y - 5, 6, 1, '#eef1f5'); R(x + 3, y - 4, 1, 3, '#9aa3b2');
+    R(x - 1, y - 4, 2, 9, '#34333e'); R(x - 4, y - 1, 1, 6, '#34333e');
+  } else {
+    R(x - 4, y - 5, 1, 10, '#4a4462'); R(x - 3, y - 5, 6, 1, '#4a4462');
+    R(x - 1, y - 2, 2, 5, '#363048');
+    R(x - 4, y + 1, 8, 1, '#e8732a');
+  }
   // touca: brilho e sombra
   R(hx + 1, y - 10, 2, 1, 'rgba(255,255,255,.7)'); R(hx + 1, y - 9, 1, 1, 'rgba(255,255,255,.4)');
   R(hx, y - 6, 6, 1, 'rgba(0,0,0,.22)');
@@ -633,7 +648,329 @@ function drawButtons() {
 function overlay(alpha = .72) { ctx.fillStyle = 'rgba(30,22,52,' + alpha + ')'; ctx.fillRect(0, 0, W, H); }
 function panel(y, h) { R(8, y, W - 16, h, OUT); R(10, y + 2, W - 20, h - 4, '#3b2f5a'); R(10, y + 2, W - 20, 1, '#6b5a9a'); R(10, y + h - 3, W - 20, 1, '#2a2140'); }
 
+/* ---------- main menu: Pablo de neoprene fazendo 🤘 ---------- */
+// sprite com contorno automático: cada célula vira um quadrado s×s
+const P_SWIM = [
+  '.s.s................',
+  '.s.s................',
+  '.sss................',
+  '.sSs....CCCC........',
+  '..Kk...CcCCCC.......',
+  '..Kk..CcnnCnCC......',
+  '..Kk..CCCCCCCC......',
+  '..Kk..ClLgglLC......',
+  '..Kk..ssssSssS......',
+  '..Vv...ssssss.......',
+  '..Vv...ssmmSs.......',
+  '..Vv....ssSS........',
+  '..Vv.....sS.........',
+  '..VvVVVVVKKVVVVV....',
+  '..VVVVVVVvvVVvVVV...',
+  '...VVVVVKKKKVvVVV...',
+  '....VvVVBKKBVvvVV...',
+  '......VVKBBKVv.vV...',
+  '......VVBKKBVv.vV...',
+  '......VVKKKKVv.vV...',
+  '......VKKKKKKv.vV...',
+  '......VKKKKKKv.kK...',
+  '......KKKKKKKk.kK...',
+  '......KKKKKKKk.kK...',
+  '......KKKKKKKk.kK...',
+  '......KKKKKKKk.ww...',
+  '......KKKKKKKk.sss..',
+  '......KKKKKKKk.Sss..',
+  '......KKKkkKKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......KKk..KKk......',
+  '......VVv..VVv......',
+  '......VVv..VVv......',
+  '......VVv..VVv......',
+  '.....ssss..ssss.....',
+  '....ssssS..ssSsS....',
+];
+const P_RUN_A = [
+  '....................',
+  '....................',
+  '....................',
+  '.......HHHHH........',
+  '......HhhhHHHH......',
+  'sss...HHhhHHHH......',
+  'sss...HHsssssH......',
+  '.sS...gGPGGMMg......',
+  '.RR...ssssSssS......',
+  '.sS....ssssss.......',
+  '.sS....smmmSs.......',
+  '.sS.....ssSS........',
+  '.sS......sS.........',
+  '.sS.TRRRRsSTTTTT....',
+  '.sRTTTRRRRtTTTTTT...',
+  '.SrTTTRWWRtTTTTTT...',
+  '....tTRRRRtTETtTT...',
+  '......RWWRtTTT.tT...',
+  '......RRRRtTTT.tT...',
+  '......RRRRtTTT.tT...',
+  '......RRRRtTTT.RR...',
+  '......RRRTtTTT.Ss...',
+  '......RRRTtTTT.Ss...',
+  '......KooooooK.Ss...',
+  '......KBnnBnBK.ww...',
+  '......KBBBBBBK.yy...',
+  '......KKKKKKKK.Ss...',
+  '......KKKKKKKK.sss..',
+  '......KKKkkKKK.Sss..',
+  '......KKK..KKK......',
+  '......KKK..KKK......',
+  '......KKK..KKK......',
+  '......RRR..RRR......',
+  '......RRr..sSS......',
+  '......ssS..ssS......',
+  '......ssS..ssS......',
+  '......ssS..ssS......',
+  '......sSS..ssS......',
+  '......ssS..qqq......',
+  '......ssS..XXX......',
+  '......ssS..XXX......',
+  '......ssS..zzz......',
+  '......ssS...........',
+  '......qqq...........',
+  '......qqq...........',
+  '.....XXXX...........',
+  '....XxXXX...........',
+  '....zzzzz...........',
+];
+const P_RUN_B = [
+  '....................',
+  '....................',
+  '....................',
+  '.......HHHHH........',
+  '......HhhhHHHH......',
+  'sss...HHhhHHHH......',
+  'sss...HHsssssH......',
+  '.sS...gGPGGMMg......',
+  '.RR...ssssSssS......',
+  '.sS....ssssss.......',
+  '.sS....smmmSs.......',
+  '.sS.....ssSS........',
+  '.sS......sS.........',
+  '.sS.TRRRRsSTTTTT....',
+  '.sRTTTRRRRtTTTTTT...',
+  '.SrTTTRWWRtTTTTTT...',
+  '....tTRRRRtTETtTT...',
+  '......RWWRtTTT.tT...',
+  '......RRRRtTTT.tT...',
+  '......RRRRtTTT.tT...',
+  '......RRRRtTTT.RR...',
+  '......RRRTtTTT.Ss...',
+  '......RRRTtTTT.Ss...',
+  '......KooooooK.ww...',
+  '......KBnnBnBK.Sss..',
+  '......KBBBBBBK.sss..',
+  '......KKKKKKKK.SSs..',
+  '......KKKKKKKK......',
+  '......KKKkkKKK......',
+  '......KKK..KKK......',
+  '......KKK..KKK......',
+  '......KKK..KKK......',
+  '......RRR..RRR......',
+  '......sSS..RRr......',
+  '......ssS..ssS......',
+  '......ssS..ssS......',
+  '......ssS..ssS......',
+  '......ssS..sSS......',
+  '......qqq..ssS......',
+  '......XXX..ssS......',
+  '......XXX..ssS......',
+  '......zzz..ssS......',
+  '...........ssS......',
+  '...........qqq......',
+  '...........qqq......',
+  '...........XXXX.....',
+  '...........XXXxX....',
+  '...........zzzzz....',
+];
+// paleta única do Pablo (estilo sem contorno: cor chapada + 1 tom de sombra)
+const PC = {
+  H: '#2a1c18', h: '#4a3026', s: '#e6ae7e', S: '#c4875a', m: '#8a3a30', M: '#d8344a', E: '#b8bcc8', y: '#ffd23a',
+  G: '#7a2a7a', P: '#d890e0', g: '#17161d', l: '#2c3150', L: '#8fa3cf',
+  C: '#ff7a1a', c: '#ffb35a',
+  T: '#40424e', t: '#2c2d37', R: '#d8262c', r: '#a51c24', W: '#f2f2f2',
+  K: '#201f28', k: '#34333e', B: '#f4f0e6', n: '#2c2d37', o: '#f08a3a',
+  w: '#5a5868', q: '#a51c24', X: '#24232c', x: '#d8262c', z: '#ecebf0',
+  V: '#d3d9e1', v: '#9da6b4',
+};
+function drawSpr(pat, x, y, s) {
+  for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) {
+    const col = PC[pat[r][c]]; if (col) R(x + c * s, y + r * s, s, s, col);
+  }
+}
+// Pablo pedalando (vista lateral, posição aero). Grade de 40x30 células; a = ângulo do pedivela
+function drawBikePablo(ox, oy, s, a) {
+  const g = (x, y, w, h, c) => R(ox + Math.round(x) * s, oy + Math.round(y) * s, w * s, h * s, c);
+  const line = (x0, y0, x1, y1, th, c, f0 = 0, f1 = 1) => {
+    const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2) || 1;
+    for (let i = Math.round(n * f0); i <= Math.round(n * f1); i++) g(x0 + (x1 - x0) * i / n - (th - 1) / 2, y0 + (y1 - y0) * i / n - (th - 1) / 2, th, th, c);
+  };
+  const ring = (cx, cy, r0, r1, c) => {
+    for (let dy = -r1; dy <= r1; dy++) for (let dx = -r1; dx <= r1; dx++) {
+      const d = Math.sqrt(dx * dx + dy * dy); if (d >= r0 - .5 && d < r1 + .5) g(cx + dx, cy + dy, 1, 1, c);
+    }
+  };
+  const BB = [18, 23], HIP = [15, 11], CR = 3, LEG = 8;
+  const leg = (ang, far) => {
+    const fx = BB[0] + Math.cos(ang) * CR, fy = BB[1] + Math.sin(ang) * CR;
+    const dx = fx - HIP[0], dy = fy - HIP[1], d = Math.min(Math.hypot(dx, dy), LEG * 2 - .05);
+    const k = Math.atan2(dy, dx) - Math.acos(d / (2 * LEG));
+    const kx = HIP[0] + Math.cos(k) * LEG, ky = HIP[1] + Math.sin(k) * LEG;
+    line(BB[0], BB[1], fx, fy, 1, far ? '#55546a' : '#8a8a98');
+    line(HIP[0], HIP[1], kx, ky, 3, far ? '#141319' : PC.K, 0, .6);
+    line(HIP[0], HIP[1], kx, ky, 3, far ? PC.r : PC.R, .6, .75);
+    line(HIP[0], HIP[1], kx, ky, 3, far ? PC.S : PC.s, .75, 1);
+    line(kx, ky, fx, fy - 1, 2, far ? PC.S : PC.s, 0, .75);
+    line(kx, ky, fx, fy - 1, 2, PC.q, .75, 1);
+    g(fx - 1, fy, 4, 1, far ? '#141319' : PC.X); g(fx, fy - 1, 2, 1, far ? '#141319' : PC.X);
+  };
+  leg(a + Math.PI, 1);
+  // rodas: pneu, aro fundo de carbono e raios girando
+  for (const cx of [8, 31]) {
+    ring(cx, 22, 7, 7, '#17161d'); ring(cx, 22, 5, 6, '#34333e'); ring(cx, 22, 6, 6, '#4a4958');
+    for (let k = 0; k < 4; k++) { const sa = a * 2 + k * Math.PI / 2; g(cx + Math.cos(sa) * 3, 22 + Math.sin(sa) * 3, 1, 1, '#8a8a98'); }
+    g(cx, 22, 1, 1, '#c8cfd9');
+  }
+  // quadro
+  const F = '#201f28';
+  line(8, 22, 18, 23, 1, F); line(15, 13, 8, 22, 1, F); line(18, 23, 15, 12, 2, F);
+  line(15, 13, 27, 13, 2, F); line(27, 14, 18, 23, 2, F); line(27, 12, 28, 15, 2, F); line(28, 15, 31, 22, 1, F);
+  g(21, 14, 3, 1, PC.R); g(22, 17, 2, 3, PC.R); g(22, 16, 2, 1, '#f2f2f2');
+  g(12, 11, 5, 1, '#17161d'); g(27, 11, 3, 1, F); line(29, 11, 34, 10, 1, F); g(29, 12, 3, 1, '#34333e');
+  g(BB[0], BB[1], 1, 1, '#c8cfd9');
+  // tronco deitado (macaquinho cinza com lateral vermelha)
+  line(15, 9, 25, 8, 4, PC.T); line(16, 11, 24, 10, 1, PC.R); line(14, 10, 16, 10, 3, PC.K);
+  g(27, 8, 2, 2, PC.S);
+  leg(a, 0);
+  // braço apoiado no clip: manga, faixa vermelha, pele, tatuagem e relógio
+  line(26, 9, 29, 11, 2, PC.T, 0, .35); line(26, 9, 29, 11, 2, PC.R, .35, .55); line(26, 9, 29, 11, 2, PC.s, .55, 1);
+  line(29, 11, 33, 9, 2, PC.s); g(31, 10, 1, 1, PC.t); g(32, 9, 1, 2, PC.w); g(34, 8, 2, 2, PC.s);
+  // capacete aero com viseira
+  g(27, 2, 4, 1, '#201f28'); g(26, 3, 6, 3, '#201f28'); g(24, 4, 2, 2, '#201f28'); g(23, 5, 2, 1, '#201f28');
+  g(27, 3, 2, 1, '#f2f2f2'); g(28, 2, 2, 1, '#4a4958');
+  g(30, 4, 3, 2, PC.l); g(31, 4, 1, 1, PC.L);
+  g(29, 6, 3, 1, PC.s); g(29, 7, 2, 1, PC.S);
+}
+
+const STAGES = [['NATACAO', '1,9KM', 1], ['CICLISMO', '90KM', 0], ['CORRIDA', '21,1KM', 0]];
+let msel = 0;
+function bigTxt(s, x, y, c, sz, hi) {
+  ctx.font = sz + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillStyle = OUT;
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, 1], [1, 1], [-1, 2], [0, 2], [1, 2], [2, 2]]) ctx.fillText(s, x + dx, y + dy);
+  ctx.fillStyle = c; ctx.fillText(s, x, y);
+  if (hi) { ctx.save(); ctx.beginPath(); ctx.rect(0, y, W, Math.round(sz * .4)); ctx.clip(); ctx.fillStyle = hi; ctx.fillText(s, x, y); ctx.restore(); }
+}
+
+/* fundo estático do menu, renderizado uma vez com dithering ordenado */
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+function ditherBand(y0, y1, stops) {
+  for (let y = y0; y < y1; y++) {
+    const t = (y - y0) / (y1 - y0) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(t)), f = t - i;
+    for (let x = 0; x < W; x++) R(x, y, 1, 1, f > (BAYER[y & 3][x & 3] + .5) / 16 ? stops[i + 1] : stops[i]);
+  }
+}
+// fundo neutro: azul médio em degradê, foco de luz atrás do Pablo e um piso mais escuro
+const MFLOOR = 222;
+let MENU_BG = null;
+function menuBg() {
+  if (MENU_BG) return MENU_BG;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const keep = ctx; ctx = c.getContext('2d');
+  ditherBand(0, MFLOOR, ['#2c4279', '#34508c', '#3d5c9a', '#4666a6']);
+  // foco de luz pontilhado atrás do personagem
+  for (const [r, col, den] of [[78, '#4f70b0', 2], [62, '#4f70b0', 1], [46, '#5a7cbc', 2], [32, '#5a7cbc', 1]]) {
+    for (let dy = -r; dy <= r; dy++) {
+      const hw = Math.round(Math.sqrt(r * r - dy * dy)), y = 150 + dy;
+      if (y >= MFLOOR) break;
+      for (let dx = -hw; dx <= hw; dx++) if (den === 1 || ((dx + dy) & 1) === 0) R(W / 2 + dx, y, 1, 1, col);
+    }
+  }
+  ditherBand(MFLOOR, H, ['#263a6c', '#22335f', '#1d2c54']);
+  R(0, MFLOOR, W, 1, '#5a7cbc'); R(0, MFLOOR + 1, W, 1, '#1d2c54');
+  ctx = keep; MENU_BG = c; return c;
+}
+
+function drawMenu() {
+  ctx.drawImage(menuBg(), 0, 0);
+
+  // título com brilho na metade de cima
+  bigTxt('IRON 70.3', W / 2, 14, '#ff7a1a', 16, '#ffb35a');
+  txt('AJUDE O PABLO!', W / 2, 38, '#fff', 'center');
+
+  const GY = 230, s = 3;
+  // Pablo da etapa selecionada (células de 3px, sem contorno)
+  const shadow = (hw, y) => {
+    for (let dy = -2; dy <= 2; dy++) {
+      const w = Math.round(hw * Math.sqrt(1 - (dy * dy) / 9));
+      for (let dx = -w; dx <= w; dx++) if (Math.abs(dx) < w - 4 || (dx + dy) % 2 === 0) R(W / 2 + dx, y + dy, 1, 1, 'rgba(10,14,36,.55)');
+    }
+  };
+  if (msel === 1) {
+    shadow(52, GY);
+    drawBikePablo(W / 2 - 20 * s, GY - 30 * s, s, Math.floor(T * 14) % 16 / 16 * Math.PI * 2);
+  } else {
+    const f = Math.floor(T * 5) % 2;
+    const pat = msel === 0 ? P_SWIM : f ? P_RUN_A : P_RUN_B;
+    const bob = msel === 0 ? Math.floor(T * 2) % 2 : (Math.floor(T * 10) % 2) * 2;
+    shadow(msel ? 20 : 24, GY);
+    drawSpr(pat, W / 2 - 10 * s, GY + 1 - pat.length * s - bob, s);
+  }
+  // setas para trocar de etapa
+  if (Math.floor(T * 2) % 2) { txt('<', 5, 150, '#fff'); txt('>', W - 13, 150, '#fff'); }
+
+  // etapa selecionada + trilha das 3 etapas
+  const open = STAGES[msel][2];
+  txt('ETAPA ' + (msel + 1) + ': ' + STAGES[msel][0], W / 2, 240, '#fff', 'center');
+  R(20, 259, W - 40, 2, '#141c3c');
+  STAGES.forEach(([, dist, op], i) => {
+    const x = 8 + i * 58, y = 252;
+    if (i === msel) rrect(x - 2, y - 2, 54, 18, '#fff');
+    rrect(x - 1, y - 1, 52, 16, OUT);
+    rrect(x, y, 50, 14, op ? '#e8732a' : '#ecd29a');
+    if (op) { R(x + 2, y + 1, 46, 1, '#ffb070'); R(x + 2, y + 12, 46, 1, '#c85a22'); }
+    else R(x + 2, y + 12, 46, 1, '#d8b878');
+    txt(dist, x + 25, y + 3, op ? '#fff' : '#b08a50', 'center');
+  });
+
+  // botão iniciar (cinza "EM BREVE" nas etapas bloqueadas)
+  const pr = open && (press.L > 0 || press.R > 0) ? 3 : 0, bw = 140, bx = (W - bw) / 2, by = 280;
+  if (open && Math.floor(T * 2.5) % 2) rrect(bx - 3, by - 3 + pr, bw + 6, 36 - pr, '#fff');
+  rrect(bx - 1, by - 1 + pr, bw + 2, 33 - pr, OUT);
+  rrect(bx, by + 4, bw, 27, open ? '#a8522a' : '#5a5470');
+  rrect(bx, by + pr, bw, 27, open ? '#f39a3c' : '#8a84a0');
+  R(bx + 3, by + 1 + pr, bw - 6, 2, open ? '#ffc86e' : '#aaa4c0'); R(bx + 2, by + 3 + pr, 2, 18, open ? '#ffc86e' : '#aaa4c0');
+  R(bx + 3, by + 24 + pr, bw - 6, 2, open ? '#d8782e' : '#746e8c');
+  if (open) bigTxt('INICIAR', W / 2, by + 6 + pr, '#fff', 16, '#ffe7c0');
+  else bigTxt('EM BREVE', W / 2, by + 6, '#dcd8ea', 16);
+}
+// toque no menu: pílulas escolhem a etapa, botão inicia, laterais trocam de etapa
+function menuTap(x, y) {
+  if (y >= 276) { if (STAGES[msel][2]) openSwim(); else tone(160, .15, 'square', .05, -40); return; }
+  if (y >= 248) msel = Math.max(0, Math.min(2, Math.floor((x - 8) / 58)));
+  else msel = (msel + (x < W / 2 ? 2 : 1)) % 3;
+  tone(520, .05, 'square', .04);
+}
+
 function draw() {
+  if (mode === 'menu') { drawMenu(); return; }
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
   drawWater();
@@ -645,7 +982,7 @@ function draw() {
     const c = (o.ph % 2) < 1;
     drawSwimmer(o.x, syOf(o.od), o.cap, c ? .9 : .1, c ? .1 : .9, 0, o.ph * 3, 1, '#34384a');
   }
-  drawSwimmer(S.x, PY, '#ff7a00', S.aL, S.aR, 0, S.kick);
+  drawSwimmer(S.x, PY, '#ff7a1a', S.aL, S.aR, 0, S.kick, 1, '#201f28', true);
   for (const p of P) R(p.x, p.y, 1, 1, p.c);
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
   M.forEach((m, i) => { if (m.life > .3 || Math.floor(T * 10) % 2) txt(m.t, W / 2, TOP + 8 + i * 12, m.c, 'center'); });
@@ -657,10 +994,11 @@ function draw() {
   if (mode === 'title') {
     overlay(.62);
     panel(34, 214);
-    txt('IRON SWIM', W / 2, 46, '#ff9a1a', 'center', 16);
-    txt('1,9 KM', W / 2, 68, '#3fd0ff', 'center', 16);
+    txt('ETAPA 1', W / 2, 44, '#ffe23a', 'center');
+    txt('NATACAO', W / 2, 56, '#ff9a1a', 'center', 16);
+    txt('1,9 KM', W / 2, 75, '#3fd0ff', 'center');
     const lines = [
-      ['Ajude o atleta a', '#fff'],
+      ['Ajude o Pablo a', '#fff'],
       ['nadar a prova!', '#fff'],
       ['', ''],
       ['Toque ESQ e DIR', '#ffb070'],
@@ -710,8 +1048,9 @@ function btnAt(x, y) {
 }
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); audio();
-  if (canRestart()) { start(); return; }
   const r = cv.getBoundingClientRect();
+  if (mode === 'menu') { menuTap((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height); return; }
+  if (canRestart()) { start(); return; }
   const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
   if (k) swim(k);
 });
@@ -722,6 +1061,12 @@ addEventListener('keydown', e => {
   if (KEYS.includes(k)) e.preventDefault();
   if (e.repeat) return;
   audio();
+  if (mode === 'menu') {
+    if (k === 'arrowleft' || k === 'a') menuTap(0, 100);
+    else if (k === 'arrowright' || k === 'd') menuTap(W, 100);
+    else if (k === ' ' || k === 'enter') menuTap(W / 2, 290);
+    return;
+  }
   if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { start(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
   else if (k === 'arrowright' || k === 'd') swim('R');
