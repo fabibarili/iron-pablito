@@ -102,7 +102,7 @@ function newRun() {
   return {
     d: 0, v: 0, x: 90, vx: 0, t: 0,
     last: null, lastT: -1, aL: 0, aR: 1, tL: 0, tR: 1,
-    breath: 0, kick: 0, obs: [], next: 9, ck: 100,
+    breath: 0, kick: 0, obs: [], next: 9, ck: 100, shark: 140,
     hits: 0, strokes: 0, warn: 0, flash: 0, endT: 0, newBest: false,
     ent: [], go: -1, fade: 0, tut: null, bub: null
   };
@@ -183,10 +183,35 @@ function updateObs(dt) {
     const p = S.d / GOAL;
     S.next += S.next < 160 ? rand(4, 8) : rand(8, 18) - p * 4;
   }
+  // tubarõezinhos nadando por baixo: não machucam, mas dá para ultrapassar
+  while (S.shark < S.d + 34 && S.shark < GOAL - 60) {
+    S.obs.push({ k: 't', od: S.shark, x: rand(MINX + 10, MAXX - 10), sp: rand(3, 5.5), ph: rand(0, 6), passed: 0 });
+    S.shark += rand(90, 170);
+  }
   for (const o of S.obs) {
     if (o.k === 's') {
       o.od += o.sp * dt; o.ph += dt * o.sp * 1.1;
       o.x += Math.sin(o.ph * .3) * 4 * dt;
+    } else if (o.k === 't') {
+      o.ph += dt * 6;
+      o.x += Math.sin(o.ph * .25) * 10 * dt;
+      o.od += o.sp * dt;
+      o.x = Math.min(MAXX - 4, Math.max(MINX + 4, o.x));
+      // trombou no tubarão: freia, empurra para o lado e não conta mais como ultrapassagem
+      if (!o.hit && Math.abs(o.od - S.d) * PPM < 14 && Math.abs(o.x - S.x) < 10) {
+        o.hit = 1; o.passed = 1; S.hits++; S.flash = .3;
+        S.v *= .3; S.vx += S.x < o.x ? -45 : 45;
+        say('TUBARÃO NA MINHA PERNA!', '#c8402a');
+        noise(.3, .25, 400); tone(110, .3, 'sawtooth', .07, -50);
+        splash(S.x, PY - 6, 10);
+      }
+      if (!o.passed && S.d > o.od + 1.5) {
+        o.passed = 1;
+        // não atropela o balão de uma batida que acabou de acontecer
+        if (!S.bub || S.bub.age > .9) say('TUBARÃO PERDEU!', '#2b6cb0');
+        tone(784, .08, 'square', .05); tone(1046, .12, 'square', .05, 0, .07);
+      }
+      continue;
     } else {
       o.ph += dt;
       o.x += Math.sin(o.ph * .8) * 4 * dt;
@@ -367,6 +392,56 @@ function drawPattern(pat, cols, x, y) {
     for (let c = 0; c < pat[r].length; c++) {
       const ch = pat[r][c]; if (cols[ch]) R(x + c, y + r, 1, 1, cols[ch]);
     }
+}
+// tubarãozinho: silhueta escura bem marcada por baixo d'água e a barbatana clássica para fora, com espuma e rastro
+const SHARK_BODY = [
+  '......b......',
+  '.....bbb.....',
+  '.....bbb.....',
+  '....bhbhb....',
+  '....bbbbb....',
+  '....bbbbb....',
+  '...bbbbbbb...',
+  '..bbbbbbbbb..',
+  '.bbbbbbbbbbb.',
+  'bbb.bbbbb.bbb',
+  'bb..bbbbb..bb',
+  'b...bbbbb...b',
+  '.....bbb.....',
+  '.....bbb.....',
+  '.....bbb.....',
+  '......b......',
+  '......b......',
+];
+const SHARK_TAIL = ['.....b.b.....', '....b...b....', '...b.....b...'];
+const SHARK_FIN = [
+  '..o..',
+  '.oDo.',
+  '.oDGo',
+  'oDGLo',
+];
+const SHARK_C = { o: '#2e2445', G: '#7f93b0', L: '#c8d8ea', D: '#5a6c8a', b: '#2a6a92', h: '#0b1e33' };
+// desenha o padrão com um contorno de 1px em volta (para a silhueta saltar da água)
+function outlinedPattern(pat, cols, x, y, oc) {
+  for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) if (cols[pat[r][c]]) {
+    R(x + c - 1, y + r, 1, 1, oc); R(x + c + 1, y + r, 1, 1, oc); R(x + c, y + r - 1, 1, 1, oc); R(x + c, y + r + 1, 1, 1, oc);
+  }
+  drawPattern(pat, cols, x, y);
+}
+function drawShark(x, y, ph) {
+  x = Math.round(x); y = Math.round(y);
+  const w = Math.round(Math.sin(ph)), OC = '#16395a';
+  // sombra no fundo
+  const SH = { b: 'rgba(20,60,110,.28)', h: 'rgba(20,60,110,.28)' };
+  drawPattern(SHARK_BODY, SH, x - 4, y - 7); drawPattern(SHARK_TAIL, SH, x - 4 + w, y + 10);
+  outlinedPattern(SHARK_TAIL, SHARK_C, x - 6 + w, y + 8, OC);
+  outlinedPattern(SHARK_BODY, SHARK_C, x - 6, y - 9, OC);
+  R(x, y - 6, 1, 13, '#3a80aa'); // brilho nas costas
+  // barbatana pequena no meio das costas, furando a água, com espuminha e rastro
+  drawPattern(SHARK_FIN, SHARK_C, x - 2, y - 1);
+  const f = Math.floor(T * 6 + x) % 2;
+  R(x - 3, y + 3, 7, 1, PAL.foam2); R(x - 2 - f, y + 3, 1, 1, PAL.foam); R(x + 2 + f, y + 3, 1, 1, PAL.foam);
+  R(x - 4 - f, y + 6, 2, 1, PAL.foam2); R(x + 3 + f, y + 6, 2, 1, PAL.foam2);
 }
 function drawJelly(x, y, ph, hit) {
   x = Math.round(x - 4); y = Math.round(y - 4);
@@ -865,7 +940,7 @@ function drawButtons() {
     R(x + 4, fy + 4, 3, 1, '#fff'); R(x + 4, fy + 5, 1, 1, '#fff');
     if (pr) rrect(x, fy, w, FH, 'rgba(46,36,69,.18)');
     // placa redonda com a seta
-    const cx = Math.round(x + w / 2), cy = fy + 16;
+    const cx = Math.round(x + w / 2), cy = fy + 22; // placa com a seta no centro do botão
     disc(cx, cy + 1, 14, b.dk);
     disc(cx, cy, 14, b.plate);
     disc(cx, cy, 13, b.md);
@@ -876,7 +951,6 @@ function drawButtons() {
     for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) {
       const col = AC2[pat[r][c]]; if (col) R(ax + c * 2, ay + r * 2, 2, 2, col);
     }
-    txt(b.k === 'L' ? 'ESQ' : 'DIR', cx + 1, fy + 33, '#fff', 'center');
   }
 }
 
@@ -1221,6 +1295,7 @@ function draw() {
   drawBuoys();
   drawMarkers(false);
   drawKayaks();
+  for (const o of S.obs) if (o.k === 't') drawShark(o.x, syOf(o.od), o.ph);
   for (const o of S.obs) if (o.k === 'j') drawJelly(o.x, syOf(o.od), o.ph, o.hit);
   for (const o of S.obs) if (o.k === 's') {
     const c = (o.ph % 2) < 1;
@@ -1258,7 +1333,7 @@ function draw() {
     if (ok) txt('Bora pra largada!', W / 2, TOP + 32, '#fff', 'center');
     else if (tu.wrong > 0) txt('Agora o outro lado!', W / 2, TOP + 32, '#ff9a6a', 'center');
     else {
-      txt('Alterne ESQ e DIR', W / 2, TOP + 28, '#fff', 'center');
+      txt('Alterne as setas', W / 2, TOP + 28, '#fff', 'center');
       txt('para dar bracadas', W / 2, TOP + 38, '#fff', 'center');
     }
     // progresso: uma casinha por braçada alternada
