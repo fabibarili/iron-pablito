@@ -8,7 +8,8 @@
 <style>
   html,body{margin:0;height:100%;position:fixed;inset:0;overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-touch-callout:none;background:#1d1830;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   body{display:flex;align-items:center;justify-content:center}
-  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;box-shadow:0 0 0 3px #000,0 10px 40px rgba(0,0,0,.6)}
+  @media (pointer: coarse){canvas{box-shadow:none!important}}
+  canvas{display:block;flex:none;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;box-shadow:0 0 0 3px #000,0 10px 40px rgba(0,0,0,.6)}
 </style>
 </head>
 <body>
@@ -22,25 +23,24 @@ let ctx = cv.getContext('2d');
 const FONT = '"Press Start 2P", monospace';
 const FONT_BUB = '"Silkscreen", monospace'; // fonte pixel mais legível para os balões, com acentos
 
-// no celular a barra do navegador aparece/some e muda o innerHeight; usa a altura "pequena" (svh),
-// que não varia, e só reajusta quando a largura muda (rotação). Escala inteira só no desktop
+// encaixa o canvas inteiro na área visível de verdade: o body é fixo (inset 0), então o tamanho dele
+// é exatamente o que aparece na tela, com ou sem a barra do navegador. Escala inteira só no desktop
 const TOUCH = matchMedia('(pointer: coarse)').matches;
-const probe = document.createElement('div');
-probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:100vh;height:100svh;visibility:hidden;pointer-events:none';
-document.body.appendChild(probe);
-let fitW = -1;
-function fit(force) {
-  const vw = innerWidth, vh = TOUCH ? Math.min(innerHeight, probe.offsetHeight || innerHeight) : innerHeight;
-  if (TOUCH && !force && vw === fitW) return;
-  fitW = vw;
-  let s = Math.min(vw / W, vh / H);
+function fit() {
+  const b = document.body;
+  let vw = b.clientWidth || innerWidth, vh = b.clientHeight || innerHeight;
+  if (window.visualViewport) { vw = Math.min(vw, visualViewport.width); vh = Math.min(vh, visualViewport.height); }
+  const m = TOUCH ? 0 : 6; // espaço para a borda no desktop
+  let s = Math.min((vw - m) / W, (vh - m) / H);
   if (!TOUCH && s >= 2) s = Math.floor(s);
-  cv.style.width = W * s + 'px';
-  cv.style.height = H * s + 'px';
+  cv.style.width = Math.floor(W * s) + 'px';
+  cv.style.height = Math.floor(H * s) + 'px';
 }
-addEventListener('resize', () => fit());
-addEventListener('orientationchange', () => setTimeout(() => fit(true), 250));
-fit(true);
+addEventListener('resize', fit);
+addEventListener('orientationchange', () => { fit(); setTimeout(fit, 300); });
+if (window.visualViewport) visualViewport.addEventListener('resize', fit);
+if (window.ResizeObserver) new ResizeObserver(fit).observe(document.body);
+fit(); setTimeout(fit, 300);
 // bloqueia zoom do navegador: toque duplo (toques rápidos alternados nas setas) e pinça
 const noZoom = e => { if (e.cancelable) e.preventDefault(); };
 document.addEventListener('touchstart', e => { if (e.touches.length > 1) noZoom(e); }, { passive: false });
