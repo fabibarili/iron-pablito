@@ -97,7 +97,7 @@ function noise(d = .1, vol = .12, freq = 1200) {
 try { localStorage.removeItem('ironswim_best'); localStorage.removeItem('iron703_unlocked'); } catch (e) {}
 let best = null;
 // progresso: quantas etapas estão liberadas (1 = só natação). Concluir uma etapa libera a próxima
-let unlocked = 1;
+let unlocked = 2; // por enquanto o ciclismo já começa liberado (voltar para 1 para exigir a natação)
 function unlockStage(n) {
   if (n <= unlocked) return false;
   unlocked = Math.min(3, n);
@@ -105,7 +105,7 @@ function unlockStage(n) {
 }
 
 let mode = 'menu', cd = 0, T = 0, S, P = [], M = [];
-const press = { L: 0, R: 0 };
+const press = { L: 0, R: 0, P: 0 };
 const BTNS = [
   { k: 'L', x: 5, w: 82, col: '#f39a3c', lt: '#ffc86e', md: '#d8782e', dk: '#a8522a', plate: '#c8662a' },
   { k: 'R', x: 93, w: 82, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98', plate: '#2a8cb0' },
@@ -306,29 +306,30 @@ function updateExit(dt) {
   // câmera acompanha até a areia e para; daí o Pablo segue tela acima
   S.d += (Math.min(S.pd, GOAL + 9) - S.d) * Math.min(1, dt * 3);
   if (syOf(S.pd) < TOP - 24) S.fadeOut += dt;
-  if (S.fadeOut > .5) advance();
+  if (S.fadeOut > .5) advance(1);
   // os outros atletas seguem nadando, mas sem passar da linha d'água
   for (const o of S.obs) { o.ph += dt * 3; if (o.k !== 'j') o.od = Math.min(GOAL - 1.5, o.od + o.sp * dt); }
 }
 
 // bike vista de cima, apontando para cima; com ou sem o Pablo montado
-function drawBikeTop(x, y, ph, rider) {
+// pal (opcional) = cores de outro ciclista: f quadro, s macaquinho, j detalhe, h capacete, hs faixa do capacete
+function drawBikeTop(x, y, ph, rider, pal = null) {
   x = Math.round(x); y = Math.round(y);
   R(x - 2, y - 13, 6, 23, 'rgba(20,14,30,.3)'); // sombra no asfalto
-  const TIRE = '#17161d', FRAME = '#d8262c';
+  const TIRE = '#17161d', FRAME = pal ? pal.f : '#d8262c';
   spr([[x - 1, y - 15, 2, 7, TIRE], [x - 1, y + 3, 2, 7, TIRE], [x - 5, y - 8, 10, 1, '#34333e'], [x, y - 7, 1, 11, FRAME], [x - 1, y + 1, 2, 2, '#201f28']]);
   R(x - 1, y - 15, 1, 7, '#4a4958'); R(x - 1, y + 3, 1, 7, '#4a4958'); // brilho dos pneus
   R(x - 5, y - 8, 1, 1, '#8a8a98'); R(x + 4, y - 8, 1, 1, '#8a8a98');  // manoplas
   if (!rider) return;
-  const k = Math.sin(ph) > 0 ? 1 : 0, suit = '#201f28', skin = '#eab07a', SIL = '#c8cfd9';
+  const k = Math.sin(ph) > 0 ? 1 : 0, suit = pal ? pal.s : '#201f28', skin = pal ? pal.sk : '#eab07a', SIL = pal ? pal.j : '#c8cfd9';
   spr([
     [x - 3, y + 1, 2, 3 + k, suit], [x + 1, y + 1, 2, 4 - k, suit],   // pernas pedalando
     [x - 3, y - 4, 6, 6, suit],                                         // tronco inclinado
     [x - 5, y - 8, 2, 4, skin], [x + 3, y - 8, 2, 4, skin],             // braços no guidão
-    [x - 2, y - 9, 4, 4, '#201f28'],                                    // capacete
+    [x - 2, y - 9, 4, 4, pal ? pal.h : '#201f28'],                      // capacete
   ]);
   R(x - 3, y - 4, 6, 2, SIL); R(x - 3, y + 3 + k, 2, 1, SIL); R(x + 1, y + 4 - k, 2, 1, SIL);
-  R(x - 1, y - 9, 2, 4, '#f2f2f2'); R(x - 2, y - 9, 1, 1, '#4a4958');  // faixa do capacete
+  R(x - 1, y - 9, 2, 4, pal ? pal.hs : '#f2f2f2'); R(x - 2, y - 9, 1, 1, '#4a4958');  // faixa do capacete
 }
 
 /* ---------- update ---------- */
@@ -389,6 +390,7 @@ function update(dt) {
     }
   }
   if (mode === 'win') updateExit(dt);
+  if (isBike()) updateBike(dt);
   if (mode === 'menu') unlockFx = Math.max(0, unlockFx - dt);
 
   // body animation
@@ -402,7 +404,7 @@ function update(dt) {
   if (S.bub) { S.bub.age += dt; S.bub.life -= dt; if (S.bub.life <= 0) S.bub = null; }
 
   // particles
-  const scroll = (mode === 'play' || mode === 'entry' || mode === 'tut') ? S.v * PPM : 0;
+  const scroll = (mode === 'play' || mode === 'entry' || mode === 'tut' || mode === 'bike') ? S.v * PPM : 0;
   for (const p of P) {
     p.x += p.vx * dt; p.y += (p.vy + scroll) * dt; p.life -= dt;
     p.vx *= .92; if (!p.bub) p.vy += 60 * dt;
@@ -583,16 +585,20 @@ function drawRunner(x, y, cap, ph, run, wd, suit = '#34384a', pablo = false) {
   const L = [];
   if (leg > 0) {
     const l1 = Math.max(1, leg + st), l2 = Math.max(1, leg - st);
-    L.push([x - 3, y + 3, 2, l1, suit], [x + 1, y + 3, 2, l2, suit]);
-    if (wd <= 0) L.push([x - 3, y + 3 + l1, 2, 1, skin], [x + 1, y + 3 + l2, 2, 1, skin]);
+    const legC = pablo === 'run' ? skin : suit;
+    L.push([x - 3, y + 3, 2, l1, legC], [x + 1, y + 3, 2, l2, legC]);
+    if (pablo === 'run') L.push([x - 3, y + 3, 2, 2, '#201f28'], [x + 1, y + 3, 2, 2, '#201f28']); // short preto
+    if (wd <= 0) L.push([x - 3, y + 3 + l1, 2, 1, pablo === 'run' ? '#d8262c' : skin], [x + 1, y + 3 + l2, 2, 1, pablo === 'run' ? '#d8262c' : skin]);
   }
   L.push([x - 4, y - 5, 8, 8, suit]);
   L.push([x - 6, y - 4 + st, 2, 6, suit], [x + 4, y - 4 - st, 2, 6, suit]);
   L.push([x - 6, y + 2 + st, 2, 1, skin], [x + 4, y + 2 - st, 2, 1, skin]);
-  if (pablo) L.push([x - 4, y - 5, 8, 3, SIL], [x - 6, y - 4 + st, 2, 3, SIL], [x + 4, y - 4 - st, 2, 3, SIL]);
+  if (pablo === 'run') L.push([x - 6, y - 1 + st, 2, 3, skin], [x + 4, y - 1 - st, 2, 3, skin]); // braços de fora (regata)
+  else if (pablo) L.push([x - 4, y - 5, 8, 3, SIL], [x - 6, y - 4 + st, 2, 3, SIL], [x + 4, y - 4 - st, 2, 3, SIL]);
   L.push([x - 3, y - 11, 6, 6, cap]);
   spr(L);
-  if (pablo) { R(x - 3, y - 5, 6, 1, '#eef1f5'); R(x - 1, y - 2, 2, 5, '#34333e'); }
+  if (pablo === 'run') { R(x - 3, y - 5, 6, 1, '#d8262c'); R(x - 1, y - 4, 2, 7, '#d8262c'); R(x, y - 3, 1, 2, '#f2f2f2'); }
+  else if (pablo) { R(x - 3, y - 5, 6, 1, '#eef1f5'); R(x - 1, y - 2, 2, 5, '#34333e'); }
   else { R(x - 3, y - 5, 6, 1, '#4a4462'); R(x - 4, y + 1, 8, 1, '#e8732a'); }
   R(x - 2, y - 10, 2, 1, 'rgba(255,255,255,.7)'); R(x - 3, y - 6, 6, 1, 'rgba(0,0,0,.22)');
   if (wd > 0) {
@@ -603,7 +609,7 @@ function drawRunner(x, y, cap, ph, run, wd, suit = '#34384a', pablo = false) {
 
 // balão de fala em cima do Pablo: cresce num pulinho, segue o nadador e pisca antes de sumir
 // balão de fala pequeno ao lado da cabeça do Pablo: cresce num pulinho, segue o nadador e pisca antes de sumir
-function drawBubble() {
+function drawBubble(ax = S.x, ay = PY) {
   const b = S.bub;
   if (!b || (b.life < .3 && Math.floor(T * 12) % 2)) return;
   const line = b.t.join(' ');
@@ -613,10 +619,10 @@ function drawBubble() {
   const inkL = Math.round(m.actualBoundingBoxLeft), inkW = Math.round(m.actualBoundingBoxLeft + m.actualBoundingBoxRight);
   const PADX = 5, h = 14, w = inkW + PADX * 2;
   const pop = b.age < .08 ? 2 : b.age < .16 ? 1 : 0;
-  const hx = Math.round(S.x);
+  const hx = Math.round(ax);
   // abre para a direita da cabeça; perto da borda direita, vira para a esquerda
   const right = hx - 2 + w <= W - 3;
-  const x = right ? Math.max(3, hx - 2) : Math.max(3, hx + 3 - w), y = PY - 18 - h - pop;
+  const x = right ? Math.max(3, hx - 2) : Math.max(3, hx + 3 - w), y = Math.round(ay) - 18 - h - pop;
   rrect(x - 1, y - 1, w + 2, h + 2, OUT);
   rrect(x, y, w, h, '#fff');
   R(x + 2, y + h - 2, w - 4, 1, '#dfe6f5');
@@ -874,7 +880,7 @@ const MINI = {
   0: ['###', '#.#', '#.#', '#.#', '###'], 1: ['.#.', '##.', '.#.', '.#.', '###'], 2: ['###', '..#', '###', '#..', '###'],
   3: ['###', '..#', '.##', '..#', '###'], 4: ['#.#', '#.#', '###', '..#', '..#'], 5: ['###', '#..', '###', '..#', '###'],
   6: ['###', '#..', '###', '#.#', '###'], 7: ['###', '..#', '.#.', '.#.', '.#.'], 8: ['###', '#.#', '###', '#.#', '###'],
-  9: ['###', '#.#', '###', '..#', '###'], M: ['#.#', '###', '###', '#.#', '#.#'],
+  9: ['###', '#.#', '###', '..#', '###'], M: ['#.#', '###', '###', '#.#', '#.#'], K: ['#.#', '##.', '#..', '##.', '#.#'],
 };
 function miniTxt(str, x, y, c, s = 1) {
   for (const ch of str) {
@@ -999,11 +1005,16 @@ function drawHUD() {
     txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
   }
   // percurso: trilha com marcas a cada 500m, bandeira quadriculada e a touca do Pablo
+  drawTrack(p, [500, 1000, 1500].map(m => m / GOAL));
+}
+// trilha do percurso no HUD: marcas (ticks), pontos coloridos [fração, cor] e a bandeira de chegada
+function drawTrack(p, ticks, dots = []) {
   const x0 = 7, len = 156, fx = x0 + Math.round(len * p);
   R(x0 - 1, 17, len + 2, 5, OUT);
   R(x0, 18, len, 3, '#463a68'); R(x0, 20, len, 1, '#3b2f5a');
   R(x0, 18, fx - x0, 3, '#4fd0dc'); R(x0, 18, fx - x0, 1, '#a6f0ee');
-  for (let m = 500; m < GOAL; m += 500) R(x0 + Math.round(len * m / GOAL), 18, 1, 3, m <= d ? '#2b88ad' : '#6b5a9a');
+  for (const t of ticks) R(x0 + Math.round(len * t), 18, 1, 3, t <= p ? '#2b88ad' : '#6b5a9a');
+  for (const [t, c] of dots) R(x0 + Math.round(len * t) - 1, 18, 3, 3, c);
   R(x0 + len + 2, 15, 1, 8, OUT); R(x0 + len + 3, 15, 7, 6, OUT);
   for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) R(x0 + len + 3 + i, 16 + j, 1, 1, ((i >> 1) + (j >> 1)) % 2 ? '#fff' : '#2a2140');
   disc(fx, 19, 3, OUT); disc(fx, 19, 2, '#ff7a1a'); R(fx - 1, 18, 1, 1, '#ffb35a');
@@ -1051,17 +1062,28 @@ const ARROW_L = [
   '....oo.....',
 ];
 const ARROW_R = ARROW_L.map(r => [...r].reverse().join(''));
-function drawButtons() {
-  // painel de fundo com textura de pontinhos
+// painel de fundo dos botões com textura de pontinhos
+function panelBg() {
   R(0, BOT, W, H - BOT, '#2a2140'); R(0, BOT, W, 1, OUT); R(0, BOT + 1, W, 1, '#3b2f5a');
   for (let yy = BOT + 4; yy < H; yy += 4) for (let xx = (yy / 4) % 2 ? 2 : 0; xx < W; xx += 4) R(xx, yy, 1, 1, '#322750');
+}
+function drawButtons() {
+  panelBg();
   const idle = mode === 'play' && S.v < 2;
-  const FH = 44, DEPTH = 5, Y0 = BOT + 5;
   for (const b of BTNS) {
-    const pr = press[b.k] > 0, off = pr ? 4 : 0, x = b.x, w = b.w, fy = Y0 + off;
+    const pr = press[b.k] > 0;
     // brilho piscando quando está parado (alterna ESQ/DIR)
     const tutNext = mode === 'tut' && !S.tut.done && (S.tut.last === 'L' ? 'R' : 'L') === b.k;
-    if ((idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1)) || (tutNext && Math.floor(T * 4) % 2)) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#fff');
+    const fy = drawBtn(b, pr, (idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1)) || (tutNext && Math.floor(T * 4) % 2));
+    arrowPlate(b, Math.round(b.x + b.w / 2), fy + 22, pr);
+  }
+}
+// botão 3D: sombra, contorno, lateral e face; afunda 4px quando apertado. Devolve o topo da face
+function drawBtn(b, pr, glow) {
+  const FH = 44, DEPTH = 5, Y0 = BOT + 5;
+  const off = pr ? 4 : 0, x = b.x, w = b.w, fy = Y0 + off;
+  if (glow) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#fff');
+  {
     // sombra no painel, contorno, lateral 3D e face
     rrect(x + 1, Y0 + 3, w, FH + DEPTH, 'rgba(10,6,24,.45)');
     rrect(x - 1, fy - 1, w + 2, FH + DEPTH + 2 - off, OUT);
@@ -1072,8 +1094,12 @@ function drawButtons() {
     R(x + 3, fy + FH - 3, w - 6, 2, b.md); R(x + w - 3, fy + 4, 2, FH - 8, b.md);
     R(x + 4, fy + 4, 3, 1, '#fff'); R(x + 4, fy + 5, 1, 1, '#fff');
     if (pr) rrect(x, fy, w, FH, 'rgba(46,36,69,.18)');
-    // placa redonda com a seta
-    const cx = Math.round(x + w / 2), cy = fy + 22; // placa com a seta no centro do botão
+  }
+  return fy;
+}
+// placa redonda com a seta no centro do botão
+function arrowPlate(b, cx, cy, pr) {
+  {
     disc(cx, cy + 1, 14, b.dk);
     disc(cx, cy, 14, b.plate);
     disc(cx, cy, 13, b.md);
@@ -1311,7 +1337,7 @@ function drawBikePablo(ox, oy, s, a) {
   g(29, 6, 3, 1, PC.s); g(29, 7, 2, 1, PC.S);
 }
 
-const STAGES = [['NATACAO', '1,9KM', 1], ['CICLISMO', '90KM', 0], ['CORRIDA', '21,1KM', 0]];
+const STAGES = [['NATACAO', '1,9KM', 1], ['CICLISMO', '90KM', 1], ['CORRIDA', '21,1KM', 0]];
 let msel = 0;
 // animação de etapa liberada no menu: qual pílula e quanto tempo falta
 const UNLOCK_T = 3;
@@ -1427,7 +1453,7 @@ function lockIcon(x, y, c) {
 }
 // toque no menu: pílulas escolhem a etapa, botão inicia, laterais trocam de etapa
 function menuTap(x, y) {
-  if (y >= 269) { if (msel < unlocked && STAGES[msel][2]) openSwim(); else tone(160, .15, 'square', .05, -40); return; }
+  if (y >= 269) { if (msel < unlocked && STAGES[msel][2]) { if (msel === 0) openSwim(); else openBike(); } else tone(160, .15, 'square', .05, -40); return; }
   if (y >= 239) msel = Math.max(0, Math.min(2, Math.floor((x - 8) / 58)));
   else msel = (msel + (x < W / 2 ? 2 : 1)) % 3;
   tone(520, .05, 'square', .04);
@@ -1435,6 +1461,7 @@ function menuTap(x, y) {
 
 function draw() {
   if (mode === 'menu') { drawMenu(); return; }
+  if (isBike()) { drawBikeScene(); return; }
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
   drawWater();
@@ -1469,12 +1496,7 @@ function draw() {
   for (const p of P) R(p.x, p.y, 1, 1, p.c);
   drawBubble();
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
-  M.forEach((m, i) => {
-    if (m.life <= .3 && Math.floor(T * 10) % 2 === 0) return;
-    const w = m.t.length * 8 + 8, y = TOP + 8 + i * 15;
-    rrect(Math.round(W / 2 - w / 2), y - 3, w, 13, 'rgba(30,22,52,.6)');
-    txt(m.t, W / 2, y, m.c, 'center');
-  });
+  drawMsgs();
   hudShadow();
   ctx.restore();
 
@@ -1519,14 +1541,582 @@ function draw() {
   if (mode === 'win' && S.fadeOut > 0) overlay(Math.min(1, S.fadeOut * 2));
 }
 
+function drawMsgs() {
+  M.forEach((m, i) => {
+    if (m.life <= .3 && Math.floor(T * 10) % 2 === 0) return;
+    const w = m.t.length * 8 + 8, y = TOP + 8 + i * 15;
+    rrect(Math.round(W / 2 - w / 2), y - 3, w, 13, 'rgba(30,22,52,.6)');
+    txt(m.t, W / 2, y, m.c, 'center');
+  });
+}
+
+/* ---------- ciclismo ---------- */
+// pista de 2700m na tela = 90km na prova (1m do jogo = 1/30 km). Asfalto de BRX0 a BRX1
+const BGOAL = 2100, BKM = 90 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
+const BVMAX = 24, WATER_EVERY = 280, KM10 = BGOAL / 9, BROAD_END = BGOAL + 8, DIS_OD = BGOAL + 13, RACK_X = 74, RUN_X = 94;
+const BIKE_MODES = ['bintro', 'bentry', 'bike', 'bwin'];
+const isBike = () => BIKE_MODES.includes(mode);
+const hold = { L: 0, R: 0 }; // setas seguradas (toque ou teclado)
+// setas juntas na esquerda, pedal grande no canto direito
+const BBTNS = [
+  { ...BTNS[0], x: 4, w: 44 },
+  { ...BTNS[1], x: 52, w: 44 },
+  { k: 'P', x: 102, w: 74, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
+];
+const BPHR = ['PERNAS DE AÇO!', 'VOANDO BAIXO!', 'SOU UM FOGUETE!', 'NEM SUEI!', 'PEDAL DE OURO!'];
+const WATER_PH = ['ÁGUA GELADA!', 'HIDRATADO!', 'AHHH, QUE DELÍCIA!', 'FÔLEGO NOVO!'];
+let bestBike = null;
+
+function newBike() {
+  return {
+    d: -2, v: 0, x: 90, vx: 0, t: 0, fol: 1, obs: [], water: [], nextHole: 60, nextDog: 150, nextRider: 70, ck: 1, half: 0,
+    hits: 0, inv: 0, flash: 0, shake: 0, warnT: 0, empty: 0, endT: 0, bub: null, ph: 0, lastT: -1, fade: 1,
+    pd: 0, bv: 0, st: '', k: 0, rx: RACK_X, fadeOut: 0, kick: 0, aL: 0, aR: 0, tL: 0, tR: 0, breath: 0,
+  };
+}
+// menu -> instruções na largada -> contagem -> prova
+function openBike() {
+  audio();
+  S = newBike(); P = []; M = []; hold.L = hold.R = 0;
+  for (let s = 260, i = 0; s < BGOAL - 120; s += WATER_EVERY, i++) S.water.push({ od: s, side: i % 2 ? 1 : -1, got: 0, miss: 0, warned: 0 });
+  for (const [x, od] of [[60, 1.5], [118, 2.5], [76, 5], [104, 7]]) S.obs.push(newRider(od, x));
+  mode = 'bintro';
+  tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+}
+const bVmax = () => 8 + (BVMAX - 8) * Math.min(1, S.fol * 3);
+// cada toque é uma pedalada; sem fôlego a pedalada rende bem menos
+function pedal() {
+  press.P = .12;
+  if (mode === 'bintro') { mode = 'bentry'; cd = 3; tone(440, .12); return; }
+  if (mode !== 'bike') return;
+  const f = Math.min(1, S.fol * 2);
+  S.v = Math.min(Math.max(S.v, bVmax()), S.v + 1.5 * (.3 + .7 * f));
+  S.fol = Math.max(0, S.fol - .002);
+  S.lastT = S.t;
+  tone(180 + S.v * 10, .035, 'triangle', .05);
+}
+function bikeKey(k, down) {
+  if (k === 'P' || mode === 'bintro') { if (down) pedal(); return; }
+  hold[k] = down ? hold[k] + 1 : Math.max(0, hold[k] - 1);
+  if (down) press[k] = .12;
+}
+const RIDER_PAL = [
+  { f: '#3a5fd0', s: '#2a3a8a', j: '#ffd84a', h: '#f6f0e8', hs: '#3a5fd0', sk: '#eab07a' },
+  { f: '#3cc45a', s: '#1f6a3a', j: '#f6f0e8', h: '#3cc45a', hs: '#f6f0e8', sk: '#c98a5a' },
+  { f: '#ffd84a', s: '#ff7a1a', j: '#ffd84a', h: '#ffd84a', hs: '#ff7a1a', sk: '#f4c9a0' },
+  { f: '#ff8ad8', s: '#9a3a8a', j: '#ff8ad8', h: '#f6f0e8', hs: '#ff8ad8', sk: '#8e5a3a' },
+  { f: '#f6f0e8', s: '#4a4462', j: '#4fd0dc', h: '#4fd0dc', hs: '#f6f0e8', sk: '#eab07a' },
+];
+const newRider = (od, x = rand(BMINX + 4, BMAXX - 4)) => ({ k: 'b', od, x, sp: rand(10, 17), ph: rand(0, 6), dr: rand(0, 6), pal: pick(RIDER_PAL), hit: 0, wob: 0 });
+const nearWater = (od, r) => S.water.some(w => Math.abs(w.od - od) < r);
+
+function spawnBike() {
+  while (S.nextHole < S.d + 40 && S.nextHole < BGOAL - 30) {
+    const od = S.nextHole, p = od / BGOAL;
+    if (!nearWater(od, 9)) {
+      const x = rand(BMINX + 2, BMAXX - 2);
+      S.obs.push({ k: 'h', od, x, hit: 0 });
+      // mais pra frente aparecem buracos em dupla
+      if (p > .35 && Math.random() < .35) S.obs.push({ k: 'h', od: od + rand(-.5, .5), x: x < 90 ? x + rand(28, 40) : x - rand(28, 40), hit: 0 });
+    }
+    S.nextHole += rand(24, 46) - p * 12;
+  }
+  // outros ciclistas: aparecem lá na frente pedalando no ritmo deles (dá pra ultrapassar)
+  while (S.nextRider < S.d + 40 && S.nextRider < BGOAL - 60) {
+    S.obs.push(newRider(S.nextRider));
+    S.nextRider += rand(45, 85);
+  }
+  while (S.nextDog < S.d + 40 && S.nextDog < BGOAL - 40) {
+    const od = S.nextDog, p = od / BGOAL, side = Math.random() < .5 ? -1 : 1;
+    if (!nearWater(od, 18)) S.obs.push({
+      k: 'c', od, side, x: side < 0 ? BRX0 - 12 : BRX1 + 12, run: 0, trig: rand(15, 21), sp: rand(48, 66) + p * 15,
+      ph: rand(0, 6), hit: 0, bark: 0, col: Math.floor(Math.random() * DOG_COLS.length),
+    });
+    S.nextDog += rand(75, 130) - p * 35;
+  }
+}
+
+function updateBike(dt) {
+  S.fade = Math.max(0, S.fade - dt * 2.5);
+  if (mode === 'bintro') return;
+  if (mode === 'bentry') {
+    const prev = Math.ceil(cd);
+    cd -= dt;
+    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
+    if (cd <= 0) { mode = 'bike'; S.v = 5; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
+    return;
+  }
+  if (mode === 'bwin') { updateT2(dt); return; }
+  S.t += dt;
+  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnT -= dt;
+  // arrasto do ar; acima do limite (pouco fôlego) freia rápido
+  S.v = Math.max(0, S.v - (S.v * .1 + .4) * dt);
+  const vm = bVmax(); if (S.v > vm) S.v = Math.max(vm, S.v - 8 * dt);
+  // direção: segura a seta para ir de lado
+  const st = (hold.R ? 1 : 0) - (hold.L ? 1 : 0);
+  S.vx += (st * 90 - S.vx) * Math.min(1, dt * 10);
+  S.x += S.vx * dt;
+  if (S.x < BMINX || S.x > BMAXX) { S.x = Math.min(BMAXX, Math.max(BMINX, S.x)); S.vx = 0; }
+  S.d += S.v * dt;
+  S.ph += dt * (1 + S.v * 1.1);
+  // fôlego: gasta com o tempo e mais rápido quando está voando
+  S.fol = Math.max(0, S.fol - dt * (1 / 65 + S.v / BVMAX / 80));
+  if (S.fol < .25 && S.warnT <= 0) { say('PRECISO DE ÁGUA!', '#2b6cb0'); S.warnT = 5; }
+  if (S.fol <= 0 && !S.empty) { S.empty = 1; msg('SEM FOLEGO!', '#ff5a4a'); tone(200, .3, 'sawtooth', .06, -80); }
+  if (S.fol > 0) S.empty = 0;
+  if (S.fol < .3 && Math.random() < dt * 4) P.push({ x: S.x + rand(-3, 3), y: PY - 10, vx: rand(-14, 14), vy: rand(-26, -10), life: .4, c: '#a6e4ff' });
+
+  spawnBike();
+  for (const o of S.obs) {
+    const dy = Math.abs(o.od - S.d) * PPM, dx = Math.abs(o.x - S.x);
+    if (o.k === 'h') {
+      if (!o.hit && S.inv <= 0 && dy < 6 && dx < 8) {
+        o.hit = 1; S.hits++; S.flash = .25; S.shake = .3; S.inv = .6; S.v *= .4;
+        say(pick(['BURACO NA PISTA!', 'AI, MEU PNEU!', 'QUE BURACÃO!']), '#c8402a');
+        noise(.25, .3, 300); tone(90, .25, 'square', .07, -30);
+      }
+      continue;
+    }
+    if (o.k === 'b') {
+      o.wob = Math.max(0, o.wob - dt);
+      o.od += o.sp * dt; o.ph += dt * (1 + o.sp * 1.1); o.dr += dt * .7;
+      o.x += (Math.sin(o.dr) * 8 + (o.wob > 0 ? Math.sin(o.wob * 40) * 40 : 0)) * dt;
+      o.x = Math.min(BMAXX, Math.max(BMINX, o.x));
+      if (!o.hit && S.inv <= 0 && dy < 18 && dx < 9) {
+        o.hit = 1; o.wob = .6; S.hits++; S.flash = .2; S.inv = .7;
+        S.v = Math.min(S.v, o.sp) * .6; o.od += .8;
+        const push = S.x < o.x ? -1 : 1; S.vx += push * 70; o.x -= push * 6;
+        say('FOI MAL, PARCEIRO!', '#c8402a');
+        noise(.18, .2, 1200); tone(1400, .05, 'square', .05); tone(1000, .05, 'square', .05, 0, .06);
+      }
+      continue;
+    }
+    // cachorro: espera na grama e atravessa a pista quando o Pablo chega perto
+    o.ph += dt * (o.run ? 16 : 4);
+    o.bark = Math.max(0, o.bark - dt);
+    if (!o.run && o.od - S.d < o.trig) { o.run = 1; o.bark = .5; tone(520, .06, 'square', .05, -200); tone(480, .08, 'square', .05, -200, .12); }
+    if (o.run) o.x -= o.side * o.sp * dt;
+    if (!o.hit && o.run && S.inv <= 0 && dy < 9 && dx < 10) {
+      o.hit = 1; o.sp *= 1.6; S.hits++; S.flash = .3; S.inv = .8; S.v *= .3; S.vx += S.x < o.x ? -60 : 60;
+      say(pick(['UM CUSCO, TADINHO!', 'CUIDADO, CACHORRO!']), '#c8402a');
+      tone(900, .12, 'square', .05, 400); noise(.2, .2, 800);
+    }
+  }
+  S.obs = S.obs.filter(o => o.od - S.d > -12 && o.od - S.d < 70 && o.x > -30 && o.x < W + 30);
+
+  // postos de hidratação: passar colado no lado do voluntário pega a garrafa
+  for (const w of S.water) {
+    if (w.got || w.miss) continue;
+    if (!w.warned && w.od - S.d < 30) { w.warned = 1; msg(w.side < 0 ? '< PEGUE AGUA' : 'PEGUE AGUA >', '#8ae3de'); tone(988, .06, 'square', .04); tone(1318, .08, 'square', .04, 0, .07); }
+    const near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30;
+    if (Math.abs(w.od - S.d) < 1.6 && near) {
+      w.got = 1; S.fol = 1; S.empty = 0;
+      say(pick(WATER_PH), '#2b6cb0');
+      splash(S.x + w.side * 4, PY - 8, 12, '#8ae3de');
+      [784, 988, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .06));
+    } else if (S.d > w.od + 1.6) { w.miss = 1; msg('PERDEU A AGUA!', '#ff9a3a'); tone(220, .2, 'square', .05, -60); }
+  }
+  // placas de 10 em 10 km
+  if (S.d >= S.ck * KM10 && S.ck < 9) {
+    const km = S.ck * 10; S.ck++;
+    msg(km === 50 ? 'PASSOU DA METADE!' : km + ' KM!', '#ffe23a');
+    if (!S.bub || S.bub.age > .9) say(pick(BPHR));
+    tone(660, .08, 'square', .05); tone(990, .14, 'square', .05, 0, .08);
+  }
+  if (S.d >= BGOAL) finishBike();
+}
+
+// chegada da T2: freia, larga a bike no cavalete, troca de roupa e sai correndo pelo meio da torcida
+function finishBike() {
+  S.obs = S.obs.filter(o => o.k !== 'b'); // pelotão some na T2
+  mode = 'bwin'; S.endT = 0; S.pd = S.d; S.bv = Math.max(6, S.v); S.st = 'ride'; S.k = 0; S.fadeOut = 0; S.bub = null;
+  hold.L = hold.R = 0;
+  S.unlockedNow = unlockStage(3);
+  if (!bestBike || S.t < bestBike) bestBike = S.t;
+  msg('FIM DO PEDAL!', '#ffe23a');
+  [523, 659, 784, 1046].forEach((f, i) => tone(f, .25, 'square', .06, 0, i * .14));
+}
+function updateT2(dt) {
+  S.endT += dt;
+  if (Math.random() < dt * 5) noise(rand(.12, .25), rand(.02, .05), rand(2200, 3400));
+  if (S.st === 'ride') {
+    S.bv = Math.max(2.5, Math.min(S.bv - 3 * dt, (DIS_OD - S.pd) * 2));
+    S.pd = Math.min(DIS_OD, S.pd + S.bv * dt); S.ph += dt * (1 + S.bv);
+    S.x += (RACK_X - S.x) * Math.min(1, dt * 3);
+    if (S.pd >= DIS_OD) {
+      S.st = 'off'; S.k = 0; S.x = RACK_X; S.rx = RACK_X;
+      say('LARGUEI A BIKE!'); tone(330, .08, 'square', .05); noise(.12, .12, 1500);
+    }
+  } else {
+    S.k += dt;
+    if (S.st === 'off') {
+      S.rx = RACK_X + Math.min(1, S.k / .45) * (RUN_X - RACK_X); S.ph += dt * 10;
+      if (S.k > .9) {
+        S.st = 'swap'; S.k = 0;
+        noise(.35, .14, 2400); tone(600, .3, 'square', .05, 600);
+        for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; P.push({ x: S.rx + Math.cos(a) * 6, y: syOf(DIS_OD) + 4 + Math.sin(a) * 6, vx: Math.cos(a) * 40, vy: Math.sin(a) * 30, life: rand(.3, .55), c: i % 2 ? '#ffe23a' : '#fff', bub: 1 }); }
+      }
+    } else if (S.st === 'swap') {
+      if (S.k > .9) { S.st = 'run'; S.k = 0; say('TÊNIS NO PÉ!'); [659, 784, 1046].forEach((f, i) => tone(f, .12, 'square', .05, 0, i * .08)); }
+    } else { S.pd += 5.5 * dt; S.ph += dt * 14; S.rx += (90 - S.rx) * Math.min(1, dt * 2); }
+  }
+  // câmera acompanha até a área de transição e para; daí o Pablo sai correndo tela acima
+  S.d += (Math.min(S.pd, BGOAL + 16) - S.d) * Math.min(1, dt * 3);
+  if (syOf(S.pd) + 14 < TOP - 20) S.fadeOut += dt;
+  if (S.fadeOut > .5) advance(2);
+}
+
+/* --- sprites do ciclismo --- */
+const DOG = [
+  '........e.e.',
+  '........HHHH',
+  't.......HHon',
+  '.tBBBBBBHHH.',
+  '..BBBBBBBB..',
+  '..BBBBBBBB..',
+];
+const DOG_LA = ['..l.l...l.l.', '..l.l...l.l.'], DOG_LB = ['.l...l.l...l', 'l....l.l....'];
+const DOG_COLS = [
+  { B: '#d8944a', H: '#e0a458', e: '#a9652f', t: '#d8944a', l: '#a9652f', o: OUT, n: OUT },       // caramelo
+  { B: '#3a3440', H: '#4a4452', e: '#24202a', t: '#3a3440', l: '#24202a', o: '#f6f0e8', n: '#000' }, // pretinho
+  { B: '#f6f0e8', H: '#f6f0e8', e: '#8a5a3a', t: '#f6f0e8', l: '#cfc6b8', o: OUT, n: OUT },        // branquinho
+];
+const flip = pat => pat.map(r => [...r].reverse().join(''));
+function drawDog(o) {
+  const y = Math.round(syOf(o.od)) - 4, x = Math.round(o.x) - 6;
+  if (y < TOP - 12 || y > BOT + 4) return;
+  const legs = o.run ? (Math.floor(o.ph) % 2 ? DOG_LA : DOG_LB) : DOG_LA;
+  let pat = DOG.concat(legs);
+  if (!o.run) pat = pat.map((r, i) => i === 2 && Math.floor(o.ph * 2) % 2 ? '.' + r.slice(1) : r); // abana o rabo
+  if (-o.side < 0) pat = flip(pat);
+  R(x + 1, y + 8, 11, 2, 'rgba(20,14,30,.3)');
+  outlinedPattern(pat, DOG_COLS[o.col], x, y, OUT);
+  if (o.bark > 0) txt('AU!', x + 6, y - 11, '#fff', 'center');
+}
+const HOLE = [
+  '...oooooo....',
+  '.ooxxxxxxoo..',
+  'oxxdddddddxo.',
+  'oxdddddddddxo',
+  '.oxxddddddxo.',
+  '..ooxxxxxoo..',
+  '....ooooo....',
+];
+const HOLE_C = { o: '#3e3c4c', x: '#2a2836', d: '#16141c' };
+function drawHole(o) {
+  const x = Math.round(o.x) - 6, y = Math.round(syOf(o.od)) - 3;
+  if (y < TOP - 10 || y > BOT + 4) return;
+  drawPattern(HOLE, HOLE_C, x, y);
+  R(x + 3, y + 6, 6, 1, '#6a687c'); R(x + 10, y + 5, 2, 1, '#6a687c'); // borda iluminada
+  R(x - 1, y + 1, 1, 1, '#3e3c4c'); R(x - 2, y, 1, 1, '#3e3c4c'); R(x + 13, y + 4, 1, 1, '#3e3c4c'); R(x + 14, y + 5, 1, 1, '#3e3c4c'); // rachaduras
+}
+const DROP = ['..o..', '.oBo.', '.oBo.', 'oBBBo', 'oBhBo', 'oBBBo', '.ooo.'];
+const DROP_C = { o: OUT, B: '#4fb8f0', h: '#d6f8ff' };
+function tree(cx, cy) {
+  disc(cx + 3, cy + 4, 8, 'rgba(20,40,10,.3)');
+  disc(cx, cy, 9, OUT); disc(cx, cy, 8, '#3b6e24'); disc(cx - 1, cy - 1, 6, '#5d9e2f'); disc(cx - 3, cy - 3, 3, '#8cc545');
+}
+function bush(cx, cy) {
+  disc(cx + 1, cy + 2, 5, 'rgba(20,40,10,.3)');
+  disc(cx, cy, 5, OUT); disc(cx, cy, 4, '#4f9a36'); disc(cx - 1, cy - 1, 2, '#7cc545');
+  R(cx + 1, cy - 2, 1, 1, '#ff8ad8'); R(cx - 2, cy + 1, 1, 1, '#ffe23a');
+}
+// voluntário do posto de água, de frente para a pista, com a garrafa esticada
+function drawVolunteer(x, y, sd, has) {
+  const sk = '#c98a5a';
+  R(x - 2, y + 8, 8, 2, 'rgba(20,40,10,.3)');
+  const ax = sd < 0 ? x + 4 : x - 7;
+  spr([[x, y, 4, 4, sk], [x, y + 4, 4, 5, '#ffd84a'], [ax, y + 4, 7, 2, sk]]);
+  R(x, y, 4, 1, '#1d1820'); R(x, y + 7, 4, 1, '#e8732a');
+  if (has) {
+    const bx = sd < 0 ? x + 10 : x - 9, by = y + 1 + (Math.sin(T * 8) > 0 ? 1 : 0);
+    spr([[bx, by, 3, 6, '#4fb8f0']]); R(bx, by, 3, 1, '#f6f0e8'); R(bx, by + 2, 1, 3, '#a6e4ff');
+  }
+}
+// grade vermelha e branca vertical, presa ao chão (rola com a câmera)
+function barrier(x, od0, od1) {
+  const y0 = Math.max(TOP - 2, Math.round(syOf(od1))), y1 = Math.min(BOT + 2, Math.round(syOf(od0)));
+  if (y1 <= y0) return;
+  R(x - 1, y0, 5, y1 - y0, OUT);
+  const wp = S.d * PPM;
+  for (let k = Math.floor((wp + PY - y1) / 8); ; k++) {
+    const y = Math.round(PY - (k * 8 - wp));
+    if (y < y0) break;
+    const t = Math.max(y0, y - 7), b = Math.min(y1, y);
+    if (b > t) R(x, t, 3, b - t, (k % 2 + 2) % 2 ? '#e8504a' : '#f6f0e8');
+  }
+  R(x, y0, 1, y1 - y0, 'rgba(255,255,255,.35)');
+}
+// pórtico inflável atravessando a pista
+function archB(od, label, col, lt, dk) {
+  const by = Math.round(syOf(od));
+  if (by < TOP - 6 || by - 52 > BOT) return;
+  const ay = by - 36, xl = BRX0 - 9, xr = BRX1 + 3;
+  R(xl - 3, by - 1, 12, 3, 'rgba(20,40,10,.3)'); R(xr - 3, by - 1, 12, 3, 'rgba(20,40,10,.3)');
+  spr([[xl, ay, 6, 36, col], [xr, ay, 6, 36, col], [xl - 4, ay - 13, xr - xl + 14, 14, col]]);
+  R(xl + 1, ay, 1, 36, lt); R(xr + 1, ay, 1, 36, lt); R(xl + 5, ay, 1, 36, dk); R(xr + 5, ay, 1, 36, dk);
+  R(xl - 3, ay - 12, xr - xl + 12, 1, lt); R(xl - 4, ay, xr - xl + 14, 1, dk);
+  for (const fx of [xl - 1, xr + 3]) { R(fx + 1, ay - 22, 1, 9, OUT); spr([[fx + 2, ay - 22, 5, 3, '#ffd84a']]); }
+  txt(label, 90, ay - 9, '#fff', 'center');
+}
+const crowdZone = od => od < 24 || (od > BGOAL - 70 && od < BROAD_END);
+
+function drawBikeWorld() {
+  const wp = S.d * PPM;
+  R(0, TOP, W, BOT - TOP, '#6fbf4a');
+  // tufinhos de grama
+  for (let k = Math.floor((wp + PY - BOT) / 16) - 1, k1 = Math.ceil((wp + PY - TOP) / 16) + 1; k <= k1; k++) {
+    const y = Math.round(PY - (k * 16 - wp));
+    for (let i = 0; i < 5; i++) {
+      const gx = Math.floor(hash(k, i + 70) * W);
+      if (gx > BRX0 - 4 && gx < BRX1 + 3) continue;
+      const gy = y - Math.floor(hash(k, i + 75) * 16);
+      R(gx, gy, 1, 2, '#4f9a36'); R(gx + 2, gy + 1, 1, 1, '#4f9a36');
+    }
+  }
+  // área da T2: tapete azul depois do fim do asfalto
+  const ye = Math.round(syOf(BROAD_END));
+  if (ye > TOP) {
+    R(43, TOP, 94, ye - TOP, OUT); R(44, TOP, 92, ye - TOP, '#3a5fd0');
+    R(45, TOP, 2, ye - TOP, '#5a80ea'); R(133, TOP, 2, ye - TOP, '#2e4fb0');
+    barrier(37, BROAD_END, BGOAL + 70); barrier(140, BROAD_END, BGOAL + 70);
+  }
+  // asfalto da largada até a T2
+  const ya = Math.max(TOP, ye), yb = Math.min(BOT, Math.round(syOf(-40)));
+  if (yb > ya) {
+    R(BRX0 - 1, ya, BRX1 - BRX0 + 2, yb - ya, OUT);
+    R(BRX0, ya, BRX1 - BRX0, yb - ya, '#545264');
+    for (let k = Math.floor((wp + PY - yb) / 16) - 1; ; k++) {
+      const y = Math.round(PY - (k * 16 - wp));
+      if (y < ya - 16) break;
+      for (let i = 0; i < 3; i++) {
+        const ax = BRX0 + 6 + Math.floor(hash(k, i + 80) * (BRX1 - BRX0 - 12)), ay = y - Math.floor(hash(k, i + 81) * 16);
+        if (ay >= ya && ay < yb) R(ax, ay, hash(k, i + 83) < .3 ? 2 : 1, 1, hash(k, i + 82) < .5 ? '#625f74' : '#48465a');
+      }
+      // tracejado amarelo no meio
+      const t = Math.max(ya, y - 9), b = Math.min(yb, y);
+      if (b > t) R(89, t, 2, b - t, '#ffd84a');
+    }
+    R(BRX0 + 3, ya, 2, yb - ya, '#f6f0e8'); R(BRX1 - 5, ya, 2, yb - ya, '#f6f0e8');
+    // marcação de km pintada no asfalto a cada 5 km: faixa transversal tracejada e número grande
+    for (let n = 1; n < 18; n++) {
+      const y = Math.round(syOf(n * KM10 / 2));
+      if (y < TOP - 20 || y > BOT + 8) continue;
+      for (let x = BRX0 + 8; x < BRX1 - 8; x += 6) R(x, y, 3, 2, '#f6f0e8');
+      const label = n * 5 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
+      R(lx - 3, y - 16, w + 6, 14, '#545264'); // apaga o tracejado amarelo atrás do número
+      miniTxt(label, lx, y - 13, n % 2 ? '#cfc6b8' : '#f6f0e8', 2);
+    }
+    // largada quadriculada e linha de desmontagem
+    for (const [od, c1, c2] of [[0, '#fff', '#2a2140'], [BGOAL + 2, '#ffe23a', '#2a2140']]) {
+      const y = Math.round(syOf(od));
+      if (y > TOP - 8 && y < BOT + 8) for (let i = 0; i < (BRX1 - BRX0) / 4; i++) for (let j = 0; j < 2; j++) R(BRX0 + i * 4, y - 8 + j * 4, 4, 4, (i + j) % 2 ? c1 : c2);
+    }
+  }
+  // zonas de hidratação pintadas no asfalto + mesa com garrafas e placa antes
+  for (const w of S.water) {
+    const y0 = Math.round(syOf(w.od + 2)), y1 = Math.round(syOf(w.od - 5));
+    if (y0 > BOT + 40 || y1 < TOP - 60) continue;
+    const lx = w.side < 0 ? BRX0 + 6 : BRX1 - 30;
+    R(lx, y0, 24, y1 - y0, w.got ? 'rgba(60,196,90,.28)' : 'rgba(79,184,240,.38)');
+    for (let y = y0; y < y1; y += 6) { R(lx, y, 1, 3, '#f6f0e8'); R(lx + 23, y, 1, 3, '#f6f0e8'); }
+    drawPattern(DROP, DROP_C, lx + 10, Math.round(syOf(w.od - 2)) - 3);
+    // mesa
+    const tx = w.side < 0 ? 6 : 160, ty = Math.round(syOf(w.od)) - 10;
+    R(tx + 2, ty + 3, 14, 22, 'rgba(20,40,10,.3)');
+    spr([[tx, ty, 14, 22, '#c88a4a']]); R(tx, ty, 14, 1, '#e8b070');
+    for (let i = 0; i < 6; i++) { const bx = tx + 2 + (i % 2) * 6, by = ty + 2 + Math.floor(i / 2) * 7; R(bx, by, 3, 5, '#4fb8f0'); R(bx, by, 3, 1, '#f6f0e8'); }
+    // placa de aviso uns metros antes
+    const sy = Math.round(syOf(w.od - 14)), sx = w.side < 0 ? 12 : 156;
+    if (sy > TOP - 20 && sy < BOT + 4) {
+      R(sx + 5, sy - 4, 2, 8, OUT);
+      spr([[sx, sy - 16, 12, 12, '#3a8fd0']]); R(sx, sy - 16, 12, 1, '#7ac8f0');
+      drawPattern(DROP, DROP_C, sx + 3, sy - 14);
+    }
+  }
+  // decoração das laterais em blocos de 8m: torcida, árvores e arbustos
+  for (let k = Math.floor((S.d + 26) / 8); k >= Math.floor((S.d - 10) / 8); k--) {
+    const od = k * 8;
+    if (crowdZone(od) || od >= BROAD_END) continue;
+    const y = Math.round(syOf(od));
+    for (const sd of [-1, 1]) {
+      if (S.water.some(w => w.side === sd && Math.abs(w.od - od) < 16)) continue;
+      const h = hash(k, sd > 0 ? 401 : 402), jx = Math.round((hash(k, sd > 0 ? 403 : 404) - .5) * 8);
+      if (h < .22) for (let i = 0; i < (h < .1 ? 3 : 2); i++) drawFan((sd < 0 ? 3 : 152) + i * 9, y - 4 + (i % 2) * 4, hash(k, 410 + i + sd));
+      else if (h < .6) tree((sd < 0 ? 15 : 165) + jx, y);
+      else if (h < .8) bush((sd < 0 ? 14 : 166) + jx, y + 3);
+    }
+  }
+  // placas de km na direita
+  for (let n = 1; n <= 8; n++) {
+    const y = Math.round(syOf(n * KM10));
+    if (y < TOP - 16 || y > BOT + 14) continue;
+    const label = n * 10 + 'KM', w = miniW(label) + 6, x = BRX1 + 6;
+    R(x + Math.floor(w / 2), y - 4, 1, 8, OUT);
+    R(x - 1, y - 15, w + 2, 11, OUT); R(x, y - 14, w, 9, '#f6f0e8'); R(x, y - 14, w, 2, '#3cc45a');
+    miniTxt(label, x + 3, y - 11, OUT);
+  }
+  // grades e torcida na largada, nos últimos km e na T2
+  barrier(BRX0 - 7, -40, 24); barrier(BRX1 + 4, -40, 24);
+  barrier(BRX0 - 7, BGOAL - 70, BROAD_END); barrier(BRX1 + 4, BGOAL - 70, BROAD_END);
+  for (let k = Math.floor((S.d + 24) / 1.3); k >= Math.floor((S.d - 9) / 1.3); k--) {
+    const od = k * 1.3, cy = Math.round(syOf(od));
+    if (od >= BROAD_END + 1 && od < BGOAL + 70) {
+      for (let c = 0; c < 6; c++) {
+        const base = c < 3 ? 3 + c * 11 : 147 + (c - 3) * 11;
+        drawFan(base + Math.round(hash(k, c + 210) * 3) - 1, cy - 4 + Math.round(hash(k, c + 220) * 4), hash(k, c + 200));
+      }
+    } else if (od < BROAD_END && crowdZone(od)) {
+      for (let c = 0; c < 4; c++) {
+        const base = c < 2 ? 4 + c * 11 : 159 + (c - 2) * 11;
+        drawFan(base + Math.round(hash(k, c + 210) * 3) - 1, cy - 4 + Math.round(hash(k, c + 220) * 4), hash(k, c + 200));
+      }
+    }
+  }
+  // cavalete da T2 com as bikes dos outros atletas
+  const ry = Math.round(syOf(DIS_OD));
+  if (ry > TOP - 20 && ry < BOT + 20) {
+    for (const bx of [50, 62]) drawBikeTop(bx, ry, 0, false);
+    if (mode === 'bwin' && S.st !== 'ride') drawBikeTop(RACK_X, ry, 0, false);
+    R(45, ry - 1, 38, 4, OUT); R(46, ry, 36, 2, '#c8cfd9'); R(46, ry, 36, 1, '#eef1f5');
+    R(45, ry + 3, 2, 3, OUT); R(81, ry + 3, 2, 3, OUT);
+  }
+  archB(BGOAL, 'T2', '#3a5fd0', '#6a90ff', '#24409a');
+  archB(BGOAL + 30, 'CORRIDA', '#e0403a', '#ff8a6a', '#a82a30');
+}
+
+// nuvem da troca rápida de roupa
+function poof(x, y, k) {
+  const s = Math.sin(Math.min(1, k / .9) * Math.PI), w = Math.round(Math.sin(T * 20));
+  const puffs = [[-6, -8, 6], [6, -9, 6], [0, -15, 6], [-5, 0, 6], [6, 0, 5], [0, -6, 8]];
+  for (const [dx, dy, r] of puffs) disc(x + dx + w, y + dy, Math.round(r * (.6 + s * .5)) + 1, OUT);
+  for (const [dx, dy, r] of puffs) disc(x + dx + w, y + dy, Math.round(r * (.6 + s * .5)), '#f6f0e8');
+  for (const [dx, dy, r] of puffs) disc(x + dx + w - 1, y + dy - 1, Math.max(1, Math.round(r * (.6 + s * .5)) - 3), '#fff');
+  // estrelinhas em volta
+  for (let i = 0; i < 4; i++) {
+    const a = T * 6 + i * Math.PI / 2, sx = Math.round(x + Math.cos(a) * 14), sy = Math.round(y - 6 + Math.sin(a) * 12);
+    R(sx - 1, sy, 3, 1, '#ffe23a'); R(sx, sy - 1, 1, 3, '#ffe23a');
+  }
+}
+
+// ícone do botão de pedalar: bike de lado com linhas de velocidade; rodas e pedivela giram com a pedalada
+function bikeIcon(cx, cy, a, bg) {
+  const ln = (x0, y0, x1, y1, c, t) => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+    for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n) - (t >> 1), Math.round(y0 + (y1 - y0) * i / n) - (t >> 1), t, t, c);
+  };
+  const rw = [cx - 11, cy + 4], fw = [cx + 13, cy + 4], bb = [cx + 1, cy + 4], st = [cx - 3, cy - 6], hd = [cx + 9, cy - 6];
+  const crank = [bb[0] + Math.round(Math.cos(a) * 4), bb[1] + Math.round(Math.sin(a) * 4)];
+  const frame = [[rw, bb], [rw, st], [st, bb], [st, hd], [hd, bb], [hd, fw], [[cx - 6, cy - 8], [cx, cy - 8]], [hd, [cx + 10, cy - 9]], [[cx + 10, cy - 9], [cx + 13, cy - 9]], [bb, crank]];
+  // linhas de velocidade atrás da bike
+  for (const [y, w] of [[cy - 5, 6], [cy, 9], [cy + 5, 6]]) { R(cx - 23 - w, y - 1, w + 2, 4, OUT); R(cx - 22 - w, y, w, 2, '#fff'); }
+  // contorno de tudo, depois o preenchimento branco
+  for (const [x, y] of [rw, fw]) disc(x, y, 9, OUT);
+  for (const [p0, p1] of frame) ln(p0[0], p0[1], p1[0], p1[1], OUT, 4);
+  R(crank[0] - 3, crank[1] - 2, 6, 4, OUT);
+  for (const [x, y] of [rw, fw]) {
+    disc(x, y, 8, '#fff'); disc(x, y, 6, bg);
+    for (let k = 0; k < 2; k++) { const sa = a + k * Math.PI / 2; ln(x - Math.round(Math.cos(sa) * 5), y - Math.round(Math.sin(sa) * 5), x + Math.round(Math.cos(sa) * 5), y + Math.round(Math.sin(sa) * 5), 'rgba(255,255,255,.6)', 1); }
+    R(x - 1, y - 1, 2, 2, '#fff');
+  }
+  for (const [p0, p1] of frame) ln(p0[0], p0[1], p1[0], p1[1], '#fff', 2);
+  R(crank[0] - 2, crank[1] - 1, 4, 2, '#ffe23a'); // pedal
+}
+function drawBikeButtons() {
+  panelBg();
+  const nudge = (mode === 'bike' && S.v < 4) || mode === 'bintro';
+  for (const b of BBTNS) {
+    const pr = press[b.k] > 0 || (b.k !== 'P' && hold[b.k] > 0);
+    const fy = drawBtn(b, pr, b.k === 'P' && nudge && Math.floor(T * 3) % 2);
+    const cx = Math.round(b.x + b.w / 2);
+    if (b.k === 'P') bikeIcon(cx + 4, fy + 21, S.ph * .6, pr ? b.md : b.col);
+    else arrowPlate(b, cx, fy + 22, pr);
+  }
+}
+
+function drawBikeHUD() {
+  R(0, 0, W, TOP, '#2a2140'); R(0, 0, W, 1, '#4a3d70'); R(0, TOP - 1, W, 1, OUT);
+  const d = Math.max(0, Math.min(BGOAL, S.d));
+  // distância em km (ícone de bike)
+  chip(2, 2, 64, 12);
+  disc(6, 10, 2, OUT); disc(12, 10, 2, OUT); R(6, 10, 1, 1, '#c8cfd9'); R(12, 10, 1, 1, '#c8cfd9');
+  R(7, 7, 5, 1, '#e8504a'); R(8, 8, 1, 2, '#e8504a'); R(11, 8, 1, 2, '#e8504a'); R(11, 6, 2, 1, '#c8cfd9');
+  txt((d * BKM).toFixed(1).replace('.', ',') + 'KM', 16, 4, '#fff');
+  // fôlego (gota + barra): azul cheio, amarelo na metade, vermelho piscando no fim
+  drawPattern(DROP, DROP_C, 69, 4);
+  const fx0 = 77, fw = 37, f = Math.round(fw * S.fol);
+  R(fx0 - 1, 4, fw + 2, 9, OUT); R(fx0, 5, fw, 7, '#463a68');
+  if (S.fol >= .25 || Math.floor(T * 6) % 2) {
+    R(fx0, 5, f, 7, S.fol > .5 ? '#4fb8f0' : S.fol > .25 ? '#ffe23a' : '#ff5a4a');
+    R(fx0, 5, f, 1, 'rgba(255,255,255,.5)');
+  }
+  // tempo
+  chip(118, 2, 60, 12);
+  drawStopwatch(120, 3, mode === 'bike' ? S.t : 0);
+  txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
+  // percurso: marcas a cada 30km e os postos de água (verde = pegou, cinza = perdeu)
+  drawTrack(d / BGOAL, [1 / 3, 2 / 3], S.water.map(w => [w.od / BGOAL, w.got ? '#3cc45a' : w.miss ? '#8a84a0' : '#4fb8f0']));
+}
+
+function drawBikeScene() {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
+  if (S.shake > 0) ctx.translate(Math.round(rand(-2, 2)), Math.round(rand(-1, 1)));
+  drawBikeWorld();
+  for (const o of S.obs) if (o.k === 'h') drawHole(o);
+  for (const o of S.obs) if (o.k === 'b' && syOf(o.od) > TOP - 20 && syOf(o.od) < BOT + 20) drawBikeTop(o.x, syOf(o.od), o.ph, true, o.pal);
+  for (const w of S.water) {
+    const y = Math.round(syOf(w.od)) - 6;
+    if (y > TOP - 16 && y < BOT + 8) drawVolunteer(w.side < 0 ? BRX0 - 6 : BRX1 + 2, y, w.side, !w.got);
+  }
+  for (const o of S.obs) if (o.k === 'c') drawDog(o);
+  let ax = S.x, ay = PY;
+  if (mode !== 'bwin') {
+    if (!(S.inv > 0 && Math.floor(T * 14) % 2)) drawBikeTop(S.x, PY, S.ph, true);
+  } else if (S.st === 'ride') {
+    ay = syOf(S.pd); drawBikeTop(S.x, ay, S.ph, true);
+  } else {
+    const fy = syOf(S.pd) + 14;
+    ax = S.rx; ay = fy - 4;
+    if (S.st === 'run') drawRunner(S.rx, fy, '#2a1c18', S.ph, 1, 0, '#40424e', 'run');
+    else if (S.st === 'off') drawRunner(S.rx, fy, '#201f28', S.ph, 1, 0, '#201f28', true);
+    else { if (S.k > .45) drawRunner(S.rx, fy, '#2a1c18', 0, 0, 0, '#40424e', 'run'); poof(S.rx, fy - 6, S.k); }
+  }
+  for (const p of P) R(p.x, p.y, 1, 1, p.c);
+  drawBubble(ax, ay);
+  if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
+  drawMsgs();
+  hudShadow();
+  ctx.restore();
+
+  drawBikeHUD();
+  drawBikeButtons();
+
+  if (mode === 'bintro') {
+    panel(TOP + 6, 116);
+    txt('COMO PEDALAR', W / 2, TOP + 14, '#ffe23a', 'center');
+    const L = [['Toque na bike >', '#fff'], ['para pedalar', '#fff'], ['Setas: desvie de', '#ff9a6a'], ['buraco e cachorro', '#ff9a6a'], ['Passe colado no', '#8ae3de'], ['posto de AGUA!', '#8ae3de']];
+    L.forEach(([t, c], i) => txt(t, W / 2, TOP + 30 + i * 11 + (i > 1 ? 4 : 0) + (i > 3 ? 4 : 0), c, 'center'));
+    if (Math.floor(T * 2.5) % 2) txt('TOQUE P/ LARGAR', W / 2, TOP + 106, '#3cc45a', 'center');
+  }
+  if (mode === 'bentry' && cd > 0) {
+    const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
+    bigTxt(String(n), W / 2 + 2, 62 - pop, '#ffe23a', 32, '#fff6b0');
+    txt('PREPARE-SE', W / 2, 104, '#fff', 'center');
+    if (bestBike) txt('RECORDE ' + fmt(bestBike), W / 2, 118, '#9f9', 'center');
+  }
+  if (S.fade > 0) overlay(S.fade);
+  if (mode === 'bwin' && S.fadeOut > 0) overlay(Math.min(1, S.fadeOut * 2));
+}
+
 /* ---------- input ---------- */
-function canRestart() { return mode === 'win' && S.endT > 1; }
-// fim da etapa -> volta ao menu já na próxima etapa
-function advance() {
+function canRestart() { return (mode === 'win' && S.endT > 1) || (mode === 'bwin' && S.endT > 2); }
+// fim da etapa -> volta ao menu já na próxima etapa (n = índice da etapa seguinte)
+function advance(n = mode === 'bwin' ? 2 : 1) {
   const fresh = S.unlockedNow;
-  mode = 'menu'; msel = 1; S = newRun(); P = []; M = []; tone(660, .08);
+  mode = 'menu'; msel = n; S = newRun(); P = []; M = []; hold.L = hold.R = 0; tone(660, .08);
   // etapa recém-liberada: o menu toca a animação do cadeado abrindo
-  if (fresh) { unlockFx = UNLOCK_T; unlockIdx = 1; [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .18, 'square', .06, 0, .7 + i * .09)); }
+  if (fresh) { unlockFx = UNLOCK_T; unlockIdx = n; [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .18, 'square', .06, 0, .7 + i * .09)); }
 }
 function btnAt(x, y) {
   if (y < TOP) return null;
@@ -1537,12 +2127,29 @@ cv.addEventListener('pointerdown', e => {
   const r = cv.getBoundingClientRect();
   if (mode === 'menu') { menuTap((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height); return; }
   if (canRestart()) { advance(); return; }
+  if (isBike()) {
+    const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+    if (y < TOP) return;
+    // faixas da tela (pista ou botões) iguais aos botões: setas na esquerda, pedal na direita
+    const k = x < 50 ? 'L' : x < 99 ? 'R' : 'P';
+    ptrs[e.pointerId] = k; bikeKey(k, true);
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    return;
+  }
   if (mode === 'tut' && (e.clientY - r.top) * H / r.height < TOP) { if ((e.clientX - r.left) * W / r.width > W / 2) begin(); return; }
   const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
   if (k) swim(k);
 });
+// soltar o dedo: para de virar
+const ptrs = {};
+const ptrUp = e => { const k = ptrs[e.pointerId]; if (k) { delete ptrs[e.pointerId]; bikeKey(k, false); } };
+cv.addEventListener('pointerup', ptrUp);
+cv.addEventListener('pointercancel', ptrUp);
+addEventListener('blur', () => { hold.L = hold.R = 0; for (const k in ptrs) delete ptrs[k]; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
-const KEYS = ['arrowleft', 'arrowright', ' ', 'a', 'd', 'enter'];
+const KEYS = ['arrowleft', 'arrowright', 'arrowup', ' ', 'a', 'd', 'w', 'enter'];
+const keyOf = k => k === 'arrowleft' || k === 'a' ? 'L' : k === 'arrowright' || k === 'd' ? 'R' : k === ' ' || k === 'enter' || k === 'arrowup' || k === 'w' ? 'P' : null;
+addEventListener('keyup', e => { const b = keyOf(e.key.toLowerCase()); if (b && b !== 'P' && isBike()) bikeKey(b, false); });
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (KEYS.includes(k)) e.preventDefault();
@@ -1555,6 +2162,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { advance(); return; }
+  if (isBike()) { const b = keyOf(k); if (b) bikeKey(b, true); return; }
   if (mode === 'tut' && (k === ' ' || k === 'enter')) { begin(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
   else if (k === 'arrowright' || k === 'd') swim('R');
