@@ -1113,6 +1113,14 @@ function arrowPlate(b, cx, cy, pr) {
   }
 }
 
+// seta branca quicando em cima de um botão (centro cx)
+function hintArrow(cx) {
+  const ay = BOT - 22 + Math.round(Math.abs(Math.sin(T * 6)) * 4);
+  const AR = ['.ooooo.', '.owwwo.', '.owwwo.', 'oowwwoo', 'owwwwwo', '.owwwo.', '..owo..', '...o...'];
+  for (let r = 0; r < AR.length; r++) for (let c = 0; c < 7; c++) {
+    const ch = AR[r][c]; if (ch !== '.') R(cx - 7 + c * 2, ay + r * 2, 2, 2, ch === 'o' ? OUT : '#fff');
+  }
+}
 function overlay(alpha = .72) { ctx.fillStyle = 'rgba(30,22,52,' + alpha + ')'; ctx.fillRect(0, 0, W, H); }
 function panel(y, h) { R(8, y, W - 16, h, OUT); R(10, y + 2, W - 20, h - 4, '#3b2f5a'); R(10, y + 2, W - 20, 1, '#6b5a9a'); R(10, y + h - 3, W - 20, 1, '#2a2140'); }
 
@@ -1520,13 +1528,7 @@ function draw() {
       if (on) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
     }
     // seta quicando em cima do botão da vez
-    if (!ok) {
-      const cx = (tu.last === 'L' ? BTNS[1] : BTNS[0]).x + 41, ay = BOT - 22 + Math.round(Math.abs(Math.sin(T * 6)) * 4);
-      const AR = ['.ooooo.', '.owwwo.', '.owwwo.', 'oowwwoo', 'owwwwwo', '.owwwo.', '..owo..', '...o...'];
-      for (let r = 0; r < AR.length; r++) for (let c = 0; c < 7; c++) {
-        const ch = AR[r][c]; if (ch !== '.') R(cx - 7 + c * 2, ay + r * 2, 2, 2, ch === 'o' ? OUT : '#fff');
-      }
-    }
+    if (!ok) hintArrow((tu.last === 'L' ? BTNS[1] : BTNS[0]).x + 41);
     if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
   }
   if (mode === 'entry') {
@@ -1554,14 +1556,14 @@ function drawMsgs() {
 // pista de 2700m na tela = 90km na prova (1m do jogo = 1/30 km). Asfalto de BRX0 a BRX1
 const BGOAL = 2100, BKM = 90 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
 const BVMAX = 24, WATER_EVERY = 280, KM10 = BGOAL / 9, BROAD_END = BGOAL + 8, DIS_OD = BGOAL + 13, RACK_X = 74, RUN_X = 94;
-const BIKE_MODES = ['bintro', 'bentry', 'bike', 'bwin'];
+const BIKE_MODES = ['btut', 'bentry', 'bike', 'bwin'];
 const isBike = () => BIKE_MODES.includes(mode);
 const hold = { L: 0, R: 0 }; // setas seguradas (toque ou teclado)
 // setas juntas na esquerda, pedal grande no canto direito
 const BBTNS = [
-  { ...BTNS[0], x: 4, w: 44 },
-  { ...BTNS[1], x: 52, w: 44 },
-  { k: 'P', x: 102, w: 74, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
+  { ...BTNS[0], x: 4, w: 60 },
+  { ...BTNS[1], x: 68, w: 60 },
+  { k: 'P', x: 132, w: 44, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
 ];
 const BPHR = ['PERNAS DE AÇO!', 'VOANDO BAIXO!', 'SOU UM FOGUETE!', 'NEM SUEI!', 'PEDAL DE OURO!'];
 const WATER_PH = ['ÁGUA GELADA!', 'HIDRATADO!', 'AHHH, QUE DELÍCIA!', 'FÔLEGO NOVO!'];
@@ -1575,28 +1577,78 @@ function newBike() {
   };
 }
 // menu -> instruções na largada -> contagem -> prova
+// menu -> aquecimento prático (pedalar, desviar de um buraco, pegar água) -> largada com contagem -> prova
+const TUT_PED = 5;
 function openBike() {
   audio();
   S = newBike(); P = []; M = []; hold.L = hold.R = 0;
+  S.d = -900; // trecho de aquecimento bem antes da largada
+  S.tut = { step: 0, n: 0, done: 0, wrong: 0, ok: 0 };
+  mode = 'btut';
+  tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+}
+function startBike() {
+  S = newBike(); P = []; M = []; hold.L = hold.R = 0;
   for (let s = 260, i = 0; s < BGOAL - 120; s += WATER_EVERY, i++) S.water.push({ od: s, side: i % 2 ? 1 : -1, got: 0, miss: 0, warned: 0 });
   for (const [x, od] of [[60, 1.5], [118, 2.5], [76, 5], [104, 7]]) S.obs.push(newRider(od, x));
-  mode = 'bintro';
-  tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
+  mode = 'bentry'; cd = 3; tone(440, .12);
+}
+// passos do aquecimento: 0 pedalar, 1 desviar do buraco, 2 pegar água
+function tutNext() {
+  const tu = S.tut;
+  tu.step++; tu.ok = 0; tu.wrong = 0;
+  [659, 784, 1046].forEach((f, i) => tone(f, .12, 'square', .05, 0, i * .08));
+  if (tu.step === 1) tutHole();
+  else if (tu.step === 2) { S.fol = .3; tutWater(); say('PRECISO DE ÁGUA!', '#2b6cb0'); }
+  else { tu.done = .001; say('BORA PRA LARGADA!'); }
+}
+function tutHole() { S.obs = [{ k: 'h', od: S.d + 18, x: Math.min(BMAXX - 4, Math.max(BMINX + 4, S.x)), hit: 0 }]; }
+// posto sempre do lado oposto ao do Pablo, para ele ter que atravessar a pista
+function tutWater() { S.water = [{ od: S.d + 24, side: S.x < 90 ? 1 : -1, got: 0, miss: 0, warned: 1 }]; }
+function updateBikeTut(dt) {
+  const tu = S.tut;
+  tu.wrong = Math.max(0, tu.wrong - dt);
+  S.shake = Math.max(0, S.shake - dt);
+  rideStep(dt);
+  // no aquecimento a bike nunca para de vez (o buraco e o posto chegam até ele) e não passa de 12 m/s
+  if (tu.step > 0 && S.v < 5) S.v = 5;
+  S.v = Math.min(S.v, 12);
+  if (tu.done) { tu.done += dt; if (tu.done > 1.4) startBike(); return; }
+  if (tu.ok) { tu.ok += dt; if (tu.ok > .7) tutNext(); return; }
+  if (tu.step === 1) {
+    const o = S.obs[0];
+    if (!o.hit && Math.abs(o.od - S.d) * PPM < 6 && Math.abs(o.x - S.x) < 8) {
+      o.hit = 1; S.v *= .4; S.flash = .25; S.shake = .3; tu.wrong = 1.2;
+      say('AI, MEU PNEU!', '#c8402a'); noise(.25, .3, 300); tone(90, .25, 'square', .07, -30);
+    }
+    if (S.d > o.od + 2) { if (o.hit) tutHole(); else { tu.ok = .001; say('DESVIEI!'); } }
+  } else if (tu.step === 2) {
+    const w = S.water[0], near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30;
+    if (Math.abs(w.od - S.d) < 1.6 && near) {
+      w.got = 1; S.fol = 1; tu.ok = .001;
+      say('ÁGUA GELADA!', '#2b6cb0'); splash(S.x + w.side * 4, PY - 8, 12, '#8ae3de');
+      [784, 988, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .06));
+    } else if (S.d > w.od + 1.6) { tu.wrong = 1.2; tone(220, .2, 'square', .05, -60); tutWater(); }
+  }
 }
 const bVmax = () => 8 + (BVMAX - 8) * Math.min(1, S.fol * 3);
 // cada toque é uma pedalada; sem fôlego a pedalada rende bem menos
 function pedal() {
   press.P = .12;
-  if (mode === 'bintro') { mode = 'bentry'; cd = 3; tone(440, .12); return; }
-  if (mode !== 'bike') return;
+  if (mode !== 'bike' && mode !== 'btut') return;
   const f = Math.min(1, S.fol * 2);
   S.v = Math.min(Math.max(S.v, bVmax()), S.v + 1.5 * (.3 + .7 * f));
   S.fol = Math.max(0, S.fol - .002);
   S.lastT = S.t;
   tone(180 + S.v * 10, .035, 'triangle', .05);
+  const tu = S.tut;
+  if (mode === 'btut' && tu.step === 0 && !tu.ok) {
+    tu.n++; tone(520 + tu.n * 80, .08, 'square', .05);
+    if (tu.n >= TUT_PED) tu.ok = .001;
+  }
 }
 function bikeKey(k, down) {
-  if (k === 'P' || mode === 'bintro') { if (down) pedal(); return; }
+  if (k === 'P') { if (down) pedal(); return; }
   hold[k] = down ? hold[k] + 1 : Math.max(0, hold[k] - 1);
   if (down) press[k] = .12;
 }
@@ -1636,19 +1688,8 @@ function spawnBike() {
   }
 }
 
-function updateBike(dt) {
-  S.fade = Math.max(0, S.fade - dt * 2.5);
-  if (mode === 'bintro') return;
-  if (mode === 'bentry') {
-    const prev = Math.ceil(cd);
-    cd -= dt;
-    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
-    if (cd <= 0) { mode = 'bike'; S.v = 5; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
-    return;
-  }
-  if (mode === 'bwin') { updateT2(dt); return; }
-  S.t += dt;
-  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnT -= dt;
+// movimento da bike: arrasto do ar, direção pelas setas e avanço na pista
+function rideStep(dt) {
   // arrasto do ar; acima do limite (pouco fôlego) freia rápido
   S.v = Math.max(0, S.v - (S.v * .1 + .4) * dt);
   const vm = bVmax(); if (S.v > vm) S.v = Math.max(vm, S.v - 8 * dt);
@@ -1659,6 +1700,21 @@ function updateBike(dt) {
   if (S.x < BMINX || S.x > BMAXX) { S.x = Math.min(BMAXX, Math.max(BMINX, S.x)); S.vx = 0; }
   S.d += S.v * dt;
   S.ph += dt * (1 + S.v * 1.1);
+}
+function updateBike(dt) {
+  S.fade = Math.max(0, S.fade - dt * 2.5);
+  if (mode === 'btut') { updateBikeTut(dt); return; }
+  if (mode === 'bentry') {
+    const prev = Math.ceil(cd);
+    cd -= dt;
+    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
+    if (cd <= 0) { mode = 'bike'; S.v = 5; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
+    return;
+  }
+  if (mode === 'bwin') { updateT2(dt); return; }
+  S.t += dt;
+  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnT -= dt;
+  rideStep(dt);
   // fôlego: gasta com o tempo e mais rápido quando está voando
   S.fol = Math.max(0, S.fol - dt * (1 / 65 + S.v / BVMAX / 80));
   if (S.fol < .25 && S.warnT <= 0) { say('PRECISO DE ÁGUA!', '#2b6cb0'); S.warnT = 5; }
@@ -1859,7 +1915,7 @@ function archB(od, label, col, lt, dk) {
   for (const fx of [xl - 1, xr + 3]) { R(fx + 1, ay - 22, 1, 9, OUT); spr([[fx + 2, ay - 22, 5, 3, '#ffd84a']]); }
   txt(label, 90, ay - 9, '#fff', 'center');
 }
-const crowdZone = od => od < 24 || (od > BGOAL - 70 && od < BROAD_END);
+const crowdZone = od => (od > -40 && od < 24) || (od > BGOAL - 70 && od < BROAD_END);
 
 function drawBikeWorld() {
   const wp = S.d * PPM;
@@ -1882,7 +1938,7 @@ function drawBikeWorld() {
     barrier(37, BROAD_END, BGOAL + 70); barrier(140, BROAD_END, BGOAL + 70);
   }
   // asfalto da largada até a T2
-  const ya = Math.max(TOP, ye), yb = Math.min(BOT, Math.round(syOf(-40)));
+  const ya = Math.max(TOP, ye), yb = Math.min(BOT, Math.round(syOf(-1400)));
   if (yb > ya) {
     R(BRX0 - 1, ya, BRX1 - BRX0 + 2, yb - ya, OUT);
     R(BRX0, ya, BRX1 - BRX0, yb - ya, '#545264');
@@ -2005,18 +2061,16 @@ function bikeIcon(cx, cy, a, bg) {
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
     for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n) - (t >> 1), Math.round(y0 + (y1 - y0) * i / n) - (t >> 1), t, t, c);
   };
-  const rw = [cx - 11, cy + 4], fw = [cx + 13, cy + 4], bb = [cx + 1, cy + 4], st = [cx - 3, cy - 6], hd = [cx + 9, cy - 6];
-  const crank = [bb[0] + Math.round(Math.cos(a) * 4), bb[1] + Math.round(Math.sin(a) * 4)];
-  const frame = [[rw, bb], [rw, st], [st, bb], [st, hd], [hd, bb], [hd, fw], [[cx - 6, cy - 8], [cx, cy - 8]], [hd, [cx + 10, cy - 9]], [[cx + 10, cy - 9], [cx + 13, cy - 9]], [bb, crank]];
-  // linhas de velocidade atrás da bike
-  for (const [y, w] of [[cy - 5, 6], [cy, 9], [cy + 5, 6]]) { R(cx - 23 - w, y - 1, w + 2, 4, OUT); R(cx - 22 - w, y, w, 2, '#fff'); }
+  const rw = [cx - 9, cy + 4], fw = [cx + 9, cy + 4], bb = [cx, cy + 4], st = [cx - 3, cy - 4], hd = [cx + 6, cy - 4];
+  const crank = [bb[0] + Math.round(Math.cos(a) * 3), bb[1] + Math.round(Math.sin(a) * 3)];
+  const frame = [[rw, bb], [rw, st], [st, bb], [st, hd], [hd, bb], [hd, fw], [[cx - 6, cy - 6], [cx - 1, cy - 6]], [hd, [cx + 7, cy - 7]], [[cx + 7, cy - 7], [cx + 9, cy - 7]], [bb, crank]];
   // contorno de tudo, depois o preenchimento branco
-  for (const [x, y] of [rw, fw]) disc(x, y, 9, OUT);
+  for (const [x, y] of [rw, fw]) disc(x, y, 8, OUT);
   for (const [p0, p1] of frame) ln(p0[0], p0[1], p1[0], p1[1], OUT, 4);
   R(crank[0] - 3, crank[1] - 2, 6, 4, OUT);
   for (const [x, y] of [rw, fw]) {
-    disc(x, y, 8, '#fff'); disc(x, y, 6, bg);
-    for (let k = 0; k < 2; k++) { const sa = a + k * Math.PI / 2; ln(x - Math.round(Math.cos(sa) * 5), y - Math.round(Math.sin(sa) * 5), x + Math.round(Math.cos(sa) * 5), y + Math.round(Math.sin(sa) * 5), 'rgba(255,255,255,.6)', 1); }
+    disc(x, y, 7, '#fff'); disc(x, y, 5, bg);
+    for (let k = 0; k < 2; k++) { const sa = a + k * Math.PI / 2; ln(x - Math.round(Math.cos(sa) * 4), y - Math.round(Math.sin(sa) * 4), x + Math.round(Math.cos(sa) * 4), y + Math.round(Math.sin(sa) * 4), 'rgba(255,255,255,.6)', 1); }
     R(x - 1, y - 1, 2, 2, '#fff');
   }
   for (const [p0, p1] of frame) ln(p0[0], p0[1], p1[0], p1[1], '#fff', 2);
@@ -2024,19 +2078,51 @@ function bikeIcon(cx, cy, a, bg) {
 }
 function drawBikeButtons() {
   panelBg();
-  const nudge = (mode === 'bike' && S.v < 4) || mode === 'bintro';
+  const nudge = (mode === 'bike' && S.v < 4) || (mode === 'btut' && S.tut.step === 0 && !S.tut.done);
   for (const b of BBTNS) {
     const pr = press[b.k] > 0 || (b.k !== 'P' && hold[b.k] > 0);
     const fy = drawBtn(b, pr, b.k === 'P' && nudge && Math.floor(T * 3) % 2);
     const cx = Math.round(b.x + b.w / 2);
-    if (b.k === 'P') bikeIcon(cx + 4, fy + 21, S.ph * .6, pr ? b.md : b.col);
+    if (b.k === 'P') bikeIcon(cx, fy + 21, S.ph * .6, pr ? b.md : b.col);
     else arrowPlate(b, cx, fy + 22, pr);
   }
 }
 
+// painel do aquecimento: instrução do passo, casinhas de progresso e seta quicando no botão certo
+function drawBikeTut() {
+  const tu = S.tut;
+  panel(TOP + 8, 62);
+  const TIT = ['PEDALE!', 'DESVIE!', 'HIDRATE!'];
+  const LIN = [['Toque na bike', 'para pedalar'], ['Segure a seta e', 'desvie do buraco'], ['Passe colado no', 'posto de agua']];
+  txt(tu.done ? 'BOA, PABLO!' : TIT[tu.step], W / 2, TOP + 15, '#ffe23a', 'center');
+  if (tu.done) txt('Bora pra largada!', W / 2, TOP + 31, '#fff', 'center');
+  else if (tu.wrong > 0) txt('Tente de novo!', W / 2, TOP + 31, '#ff9a6a', 'center');
+  else LIN[tu.step].forEach((t, i) => txt(t, W / 2, TOP + 27 + i * 10, '#fff', 'center'));
+  // passo 1: uma casinha por pedalada; depois: uma casinha por passo
+  const ped = tu.step === 0 && !tu.done, n = ped ? TUT_PED : 3, on = ped ? tu.n : tu.step + (tu.ok || tu.done ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const x = W / 2 - n * 7 + i * 14 + 1, y = TOP + 53, lit = i < on;
+    R(x, y, 12, 9, OUT); R(x + 1, y + 1, 10, 7, lit ? '#3cc45a' : '#2a2140');
+    if (lit) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
+  }
+  if (!tu.done && !tu.ok) {
+    let b = BBTNS[2];
+    if (tu.step === 1) { const o = S.obs[0]; b = o && Math.abs(o.x - S.x) < 10 ? BBTNS[S.x >= o.x ? 1 : 0] : null; }
+    if (tu.step === 2) { const w = S.water[0], near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30; b = near ? null : BBTNS[w.side < 0 ? 0 : 1]; }
+    if (b) hintArrow(Math.round(b.x + b.w / 2));
+  }
+  if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
+}
 function drawBikeHUD() {
   R(0, 0, W, TOP, '#2a2140'); R(0, 0, W, 1, '#4a3d70'); R(0, TOP - 1, W, 1, OUT);
   const d = Math.max(0, Math.min(BGOAL, S.d));
+  if (mode === 'btut') {
+    chip(2, 2, 96, 12); txt('AQUECIMENTO', 6, 4, '#ffe23a');
+    rrect(119, 2, 59, 12, Math.floor(T * 2) % 2 ? '#4a3d70' : '#3b2f5a'); R(121, 13, 55, 1, '#17122a');
+    txt('PULAR>', 124, 4, '#fff');
+    drawTrack(0, [1 / 3, 2 / 3]);
+    return;
+  }
   // distância em km (ícone de bike)
   chip(2, 2, 64, 12);
   disc(6, 10, 2, OUT); disc(12, 10, 2, OUT); R(6, 10, 1, 1, '#c8cfd9'); R(12, 10, 1, 1, '#c8cfd9');
@@ -2092,13 +2178,7 @@ function drawBikeScene() {
   drawBikeHUD();
   drawBikeButtons();
 
-  if (mode === 'bintro') {
-    panel(TOP + 6, 116);
-    txt('COMO PEDALAR', W / 2, TOP + 14, '#ffe23a', 'center');
-    const L = [['Toque na bike >', '#fff'], ['para pedalar', '#fff'], ['Setas: desvie de', '#ff9a6a'], ['buraco e cachorro', '#ff9a6a'], ['Passe colado no', '#8ae3de'], ['posto de AGUA!', '#8ae3de']];
-    L.forEach(([t, c], i) => txt(t, W / 2, TOP + 30 + i * 11 + (i > 1 ? 4 : 0) + (i > 3 ? 4 : 0), c, 'center'));
-    if (Math.floor(T * 2.5) % 2) txt('TOQUE P/ LARGAR', W / 2, TOP + 106, '#3cc45a', 'center');
-  }
+  if (mode === 'btut') drawBikeTut();
   if (mode === 'bentry' && cd > 0) {
     const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
     bigTxt(String(n), W / 2 + 2, 62 - pop, '#ffe23a', 32, '#fff6b0');
@@ -2129,9 +2209,9 @@ cv.addEventListener('pointerdown', e => {
   if (canRestart()) { advance(); return; }
   if (isBike()) {
     const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
-    if (y < TOP) return;
+    if (y < TOP) { if (mode === 'btut' && x > W / 2) startBike(); return; }
     // faixas da tela (pista ou botões) iguais aos botões: setas na esquerda, pedal na direita
-    const k = x < 50 ? 'L' : x < 99 ? 'R' : 'P';
+    const k = x < 66 ? 'L' : x < 130 ? 'R' : 'P';
     ptrs[e.pointerId] = k; bikeKey(k, true);
     try { cv.setPointerCapture(e.pointerId); } catch (err) {}
     return;
@@ -2162,6 +2242,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { advance(); return; }
+  if (mode === 'btut' && k === 'escape') { startBike(); return; }
   if (isBike()) { const b = keyOf(k); if (b) bikeKey(b, true); return; }
   if (mode === 'tut' && (k === ' ' || k === 'enter')) { begin(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
