@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Iron 70.3</title>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;height:100%;background:#1d1830;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   body{display:flex;align-items:center;justify-content:center}
@@ -20,6 +20,7 @@ const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
 let ctx = cv.getContext('2d');
 const FONT = '"Press Start 2P", monospace';
+const FONT_BUB = '"Silkscreen", monospace'; // fonte pixel mais legível para os balões, com acentos
 
 function fit() {
   let s = Math.min(innerWidth / W, innerHeight / H);
@@ -103,11 +104,13 @@ function newRun() {
     last: null, lastT: -1, aL: 0, aR: 1, tL: 0, tR: 1,
     breath: 0, kick: 0, obs: [], next: 9, ck: 100,
     hits: 0, strokes: 0, warn: 0, flash: 0, endT: 0, newBest: false,
-    ent: [], go: -1, fade: 0, tut: null
+    ent: [], go: -1, fade: 0, tut: null, bub: null
   };
 }
 S = newRun();
 
+// balão de fala saindo do Pablo (linhas separadas por |)
+function say(t, c = OUT) { S.bub = { t: t.split('|'), c, life: 1.8, age: 0 }; }
 function msg(t, c = '#fff') { M.push({ t, c, life: 1.6 }); if (M.length > 3) M.shift(); }
 function splash(x, y, n, col = '#ffffff') {
   for (let i = 0; i < n; i++) P.push({ x: x + rand(-2, 2), y: y + rand(-2, 2), vx: rand(-14, 14), vy: rand(-18, 4), life: rand(.25, .5), c: col });
@@ -194,12 +197,12 @@ function updateObs(dt) {
       o.hit = 1; S.hits++; S.flash = .3;
       if (o.k === 'j') {
         S.v *= .2;
-        msg('AGUA-VIVA! AI!', '#ff8cf4');
+        say('ÁGUA-VIVA, AI AI AI!', '#b03aa8');
         tone(140, .35, 'sawtooth', .08, -80);
       } else {
         S.v *= .3;
         S.vx += S.x < o.x ? -45 : 45;
-        msg('LEVOU UM CHUTE!', '#ffcc66');
+        say('LEVEI UM CHUTE!', '#c8402a');
         noise(.25, .25, 500);
       }
       splash(S.x, PY - 6, 10);
@@ -245,7 +248,7 @@ function updateEnt(dt) {
 }
 
 /* ---------- update ---------- */
-const PHRASES = ['BOA!', 'RITMO!', 'FOCO!', 'VAMOS!', 'SEGUE!', 'FORTE!'];
+const PHRASES = ['SOU EMBAÇADO!', 'MUITO SEREIO!', 'NEM CANSEI!', 'NADANDO DE BRAÇADA!', 'SOU UM SEREIO!'];
 
 function update(dt) {
   T += dt;
@@ -285,7 +288,11 @@ function update(dt) {
 
     if (S.d >= S.ck && S.ck < GOAL) {
       const n = S.ck; S.ck += 100;
-      msg(n === 1000 ? 'PASSOU DA METADE!' : n === 1800 ? 'ULTIMOS 100m!' : n + 'm ' + pick(PHRASES), '#ffe23a');
+      if (n === 1000) msg('PASSOU DA METADE!', '#ffe23a');
+      else if (n === 1800) msg('ULTIMOS 100m!', '#ffe23a');
+      // não atropela o balão de uma batida que acabou de acontecer
+      if (!S.bub || S.bub.age > .9) say(pick(PHRASES.filter(f => f !== S.lastPhrase)));
+      S.lastPhrase = S.bub.t.join('|');
       tone(660, .08, 'square', .05); tone(990, .14, 'square', .05, 0, .08);
     }
     if (S.d >= GOAL) {
@@ -305,6 +312,7 @@ function update(dt) {
   S.aR += (S.tR - S.aR) * Math.min(1, dt * 14);
   S.breath = Math.max(0, S.breath - dt);
   S.flash = Math.max(0, S.flash - dt);
+  if (S.bub) { S.bub.age += dt; S.bub.life -= dt; if (S.bub.life <= 0) S.bub = null; }
 
   // particles
   const scroll = (mode === 'play' || mode === 'entry' || mode === 'tut') ? S.v * PPM : 0;
@@ -454,6 +462,29 @@ function drawRunner(x, y, cap, ph, run, wd, suit = '#34384a', pablo = false) {
     const fy = y + 3 + leg, f = Math.floor(T * 8 + x) % 2;
     R(x - 6 - f, fy, 12 + f * 2, 1, PAL.foam); R(x - 4 + f, fy + 1, 8, 1, PAL.foam2);
   }
+}
+
+// balão de fala em cima do Pablo: cresce num pulinho, segue o nadador e pisca antes de sumir
+// balão de fala pequeno ao lado da cabeça do Pablo: cresce num pulinho, segue o nadador e pisca antes de sumir
+function drawBubble() {
+  const b = S.bub;
+  if (!b || (b.life < .3 && Math.floor(T * 12) % 2)) return;
+  const line = b.t.join(' ');
+  ctx.font = '8px ' + FONT_BUB; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const tw = Math.ceil(ctx.measureText(line).width), w = tw + 8, h = 14;
+  const pop = b.age < .08 ? 2 : b.age < .16 ? 1 : 0;
+  const hx = Math.round(S.x);
+  // abre para a direita da cabeça; perto da borda direita, vira para a esquerda
+  const right = hx - 2 + w <= W - 3;
+  const x = right ? Math.max(3, hx - 2) : Math.max(3, hx + 3 - w), y = PY - 18 - h - pop;
+  rrect(x - 1, y - 1, w + 2, h + 2, OUT);
+  rrect(x, y, w, h, '#fff');
+  R(x + 2, y + h - 2, w - 4, 1, '#dfe6f5');
+  // rabinho em degrau descendo até a touca
+  const tx = right ? x + 3 : x + w - 7, d = right ? -1 : 1;
+  R(tx - 1, y + h, 6, 2, OUT); R(tx + (right ? -1 : 2), y + h + 2, 4, 1, OUT); R(tx + (right ? -2 : 4), y + h + 3, 3, 1, OUT);
+  R(tx, y + h - 1, 4, 2, '#fff'); R(tx + (right ? 0 : 3), y + h + 1, 1, 1, '#fff'); R(tx + (right ? 0 : 3) + d, y + h + 2, 1, 1, '#fff');
+  ctx.fillStyle = b.c; ctx.fillText(line, x + 4, y + 3);
 }
 
 /* ---------- cenário ---------- */
@@ -630,6 +661,53 @@ function drawShores() {
   }
 }
 
+// fonte miúda 3x5 para as placas de distância
+const MINI = {
+  0: ['###', '#.#', '#.#', '#.#', '###'], 1: ['.#.', '##.', '.#.', '.#.', '###'], 2: ['###', '..#', '###', '#..', '###'],
+  3: ['###', '..#', '.##', '..#', '###'], 4: ['#.#', '#.#', '###', '..#', '..#'], 5: ['###', '#..', '###', '..#', '###'],
+  6: ['###', '#..', '###', '#.#', '###'], 7: ['###', '..#', '.#.', '.#.', '.#.'], 8: ['###', '#.#', '###', '#.#', '###'],
+  9: ['###', '#.#', '###', '..#', '###'], M: ['#.#', '###', '###', '#.#', '#.#'],
+};
+function miniTxt(str, x, y, c, s = 1) {
+  for (const ch of str) {
+    const g = MINI[ch];
+    if (g) for (let r = 0; r < 5; r++) for (let k = 0; k < 3; k++) if (g[r][k] === '#') R(x + k * s, y + r * s, s, s, c);
+    x += 4 * s;
+  }
+}
+const miniW = (str, s = 1) => str.length * 4 * s - s;
+
+// marcadores de distância a cada 100m: linha e número pintados no fundo + placas nas boias grandes
+function drawMarkers(floor) {
+  const a = Math.max(100, Math.ceil((S.d - 14) / 100) * 100), b = Math.min(GOAL - 100, S.d + 30);
+  for (let m = a; m <= b; m += 100) {
+    const sy = Math.round(syOf(m));
+    if (sy < TOP - 20 || sy > BOT + 20) continue;
+    const label = m + 'M';
+    if (floor) {
+      // faixa tracejada no fundo, de boia a boia
+      for (let x = MINX - 2; x < MAXX + 2; x += 8) R(x, sy - 1, 5, 2, 'rgba(30,70,120,.22)');
+      // número grande no fundo do mar, ondulando de leve
+      const s = 2, w = miniW(label, s), wob = Math.round(Math.sin(T * 1.4 + m) * 1);
+      miniTxt(label, Math.round(W / 2 - w / 2) + wob + 1, sy + 6 + 1, 'rgba(30,70,120,.2)', s);
+      miniTxt(label, Math.round(W / 2 - w / 2) + wob, sy + 6, 'rgba(214,248,243,.35)', s);
+    } else {
+      // placa flutuante presa em cima de cada boia grande
+      const half = m === 1000, bob = Math.sin(T * 3 + m) > 0 ? 1 : 0;
+      const w = miniW(label) + 6;
+      for (const rx of [MINX - 8, MAXX + 7]) {
+        const bx = Math.max(1, Math.min(W - w - 1, rx - Math.floor(w / 2))), by = sy - 17 + bob;
+        R(rx, by + 9, 1, 4, OUT);
+        R(bx - 1, by - 1, w + 2, 11, OUT);
+        R(bx, by, w, 9, half ? '#ffe23a' : '#f6f0e8');
+        R(bx, by, w, 2, half ? '#ff7a1a' : '#e8504a');
+        R(bx, by + 8, w, 1, half ? '#d8a020' : '#cfc6b8');
+        miniTxt(label, bx + 3, by + 3, OUT);
+      }
+    }
+  }
+}
+
 function drawBuoys() {
   const a = Math.max(0, Math.floor((S.d - 14) / 5) * 5), b = Math.min(GOAL, S.d + 30);
   for (let m = a; m <= b; m += 5) {
@@ -707,9 +785,9 @@ function drawHUD() {
       R(x, 13 - h, 7, h, i < lit ? PACE[i] : '#463a68');
       if (i < lit) R(x, 13 - h, 7, 1, 'rgba(255,255,255,.5)');
     }
-    // tempo (ícone de relógio)
+    // tempo (cronômetro com ponteiro girando)
     chip(118, 2, 60, 12);
-    disc(123, 8, 3, '#8ae3de'); disc(123, 8, 2, '#17122a'); R(123, 6, 1, 3, '#8ae3de'); R(123, 8, 2, 1, '#8ae3de');
+    drawStopwatch(120, 3, mode === 'play' ? S.t : 0);
     txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
   }
   // percurso: trilha com marcas a cada 500m, bandeira quadriculada e a touca do Pablo
@@ -721,6 +799,28 @@ function drawHUD() {
   R(x0 + len + 2, 15, 1, 8, OUT); R(x0 + len + 3, 15, 7, 6, OUT);
   for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) R(x0 + len + 3 + i, 16 + j, 1, 1, ((i >> 1) + (j >> 1)) % 2 ? '#fff' : '#2a2140');
   disc(fx, 19, 3, OUT); disc(fx, 19, 2, '#ff7a1a'); R(fx - 1, 18, 1, 1, '#ffb35a');
+}
+// cronômetro 7x10: coroa, botão lateral, aro ciano, mostrador claro e ponteiro vermelho que dá a volta a cada 4s
+const WATCH = [
+  '..ooo..',
+  '...o.b.',
+  '.ooooo.',
+  'oFFFFFo',
+  'oFFFFFo',
+  'oFFFFFo',
+  'oFFFFFo',
+  'oFFFFFo',
+  '.ooooo.',
+];
+const WATCH_HAND = [[0, -2], [1, -2], [2, -1], [2, 0], [2, 1], [1, 2], [0, 2], [-1, 2], [-2, 1], [-2, 0], [-2, -1], [-1, -2]];
+function drawStopwatch(x, y, t) {
+  drawPattern(WATCH, { o: '#8ae3de', b: '#5fb8c0', F: '#f6f0e8' }, x, y);
+  R(x + 1, y + 3, 1, 1, '#fff'); R(x + 2, y + 3, 1, 1, '#fff');            // brilho do vidro
+  R(x + 1, y + 7, 5, 1, '#d6dce6');                                         // sombra do mostrador
+  const cx = x + 3, cy = y + 5, [hx, hy] = WATCH_HAND[Math.floor(t * 3) % 12];
+  R(cx + Math.sign(hx), cy + Math.sign(hy), 1, 1, '#e8504a');
+  R(cx + hx, cy + hy, 1, 1, '#e8504a');
+  R(cx, cy, 1, 1, OUT);
 }
 // sombra da barra sobre a água
 function hudShadow() { R(0, TOP, W, 1, 'rgba(30,22,52,.4)'); R(0, TOP + 1, W, 1, 'rgba(30,22,52,.18)'); }
@@ -1117,7 +1217,9 @@ function draw() {
   ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
   drawWater();
   drawShores();
+  drawMarkers(true);
   drawBuoys();
+  drawMarkers(false);
   drawKayaks();
   for (const o of S.obs) if (o.k === 'j') drawJelly(o.x, syOf(o.od), o.ph, o.hit);
   for (const o of S.obs) if (o.k === 's') {
@@ -1135,6 +1237,7 @@ function draw() {
   else drawSwimmer(S.x, PY, '#ff7a1a', S.aL, S.aR, 0, S.kick, 1, '#201f28', true);
   S.ent.filter(e => e.od < S.d).forEach(drawEnt);
   for (const p of P) R(p.x, p.y, 1, 1, p.c);
+  drawBubble();
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
   M.forEach((m, i) => {
     if (m.life <= .3 && Math.floor(T * 10) % 2 === 0) return;
@@ -1247,7 +1350,7 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 const go = () => requestAnimationFrame(loop);
-if (document.fonts && document.fonts.load) document.fonts.load('8px "Press Start 2P"').then(go, go); else go();
+if (document.fonts && document.fonts.load) Promise.all([document.fonts.load('8px "Press Start 2P"'), document.fonts.load('8px "Silkscreen"', 'ÁÇÔ')]).then(go, go); else go();
 })();
 </script>
 </body>
