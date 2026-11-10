@@ -16,7 +16,9 @@
 <canvas id="c" width="180" height="320"></canvas>
 <script>
 (() => {
-const W = 180, H = 320, TOP = 24, BOT = 258, PY = 206, PPM = 8, GOAL = 1900;
+const W = 180, H = 320, TOP = 24, BOT = 258, PY = 206, PPM = 8;
+// natação: a prova mostra 1900m, mas o percurso na tela é 30% mais curto (1m mostrado = SC m do mundo)
+const SWIM_M = 1900, SC = .7, GOAL = Math.round(SWIM_M * SC), BIG_BUOY = Math.round(100 * SC);
 const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
 let ctx = cv.getContext('2d');
@@ -107,8 +109,8 @@ function unlockStage(n) {
 let mode = 'menu', cd = 0, T = 0, S, P = [], M = [];
 const press = { L: 0, R: 0, P: 0 };
 const BTNS = [
-  { k: 'L', x: 5, w: 82, col: '#f39a3c', lt: '#ffc86e', md: '#d8782e', dk: '#a8522a', plate: '#c8662a' },
-  { k: 'R', x: 93, w: 82, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98', plate: '#2a8cb0' },
+  { k: 'L', x: 5, w: 82, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
+  { k: 'R', x: 93, w: 82, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
 ];
 const CAPS = ['#29c94a', '#f04848', '#ffe23a', '#ff8ad8', '#ffffff', '#9a6bff'];
 
@@ -142,22 +144,14 @@ function start() {
   tone(440, .12);
 }
 
-// menu principal -> tutorial prático de um passo (Pablo sozinho na água) -> largada animada -> prova
-function openSwim() {
-  press.L = press.R = .12;
-  S = newRun(); P = []; M = [];
-  S.d = 8; S.tut = { n: 0, last: null, done: 0, wrong: 0 };
-  mode = 'tut'; tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
-}
-// fim (ou pulo) do tutorial: vai para a largada na praia
-function begin() { start(); }
-const TUT_N = 4;
+// menu principal -> largada animada (botões piscando em amarelo) -> prova
+function openSwim() { start(); }
 
 /* ---------- actions ---------- */
 // cada toque é uma braçada do lado tocado: avança e puxa o nadador para aquele lado
 function swim(side) {
   press[side] = .12;
-  if (mode !== 'play' && mode !== 'tut') return;
+  if (mode !== 'play') return;
   S.lastT = S.t;
   S.last = side;
   S.v = Math.min(16, S.v + 1.1); // mais toques = mais rápido
@@ -167,21 +161,12 @@ function swim(side) {
   S.strokes++;
   splash(S.x + dir * 6, PY - 16, 5);
   noise(.09, .1, 1400 + Math.random() * 400);
-  // tutorial: só conta a braçada quando troca de lado
-  const tu = S.tut;
-  if (mode === 'tut' && !tu.done) {
-    if (side !== tu.last) {
-      tu.last = side; tu.n++;
-      tone(520 + tu.n * 90, .08, 'square', .05);
-      if (tu.n >= TUT_N) { tu.done = .001; [659, 784, 1046].forEach((f, i) => tone(f, .16, 'square', .06, 0, .1 + i * .1)); }
-    } else { tu.wrong = .9; tone(160, .12, 'square', .05, -40); }
-  }
 }
 
 /* ---------- obstacles ---------- */
 function spawn(od) {
   const p = od / GOAL;
-  const swimmerChance = od < 220 ? .85 : .65 - p * .3;
+  const swimmerChance = od < 220 * SC ? .85 : .65 - p * .3;
   const x = rand(MINX + 6, MAXX - 6);
   if (Math.random() < swimmerChance) {
     S.obs.push({ k: 's', od, x, sp: rand(4, 8.5), cap: pick(CAPS), ph: rand(0, 6), hit: 0 });
@@ -195,12 +180,12 @@ function updateObs(dt) {
   while (S.next < S.d + 34 && S.next < GOAL - 25) {
     spawn(S.next);
     const p = S.d / GOAL;
-    S.next += S.next < 160 ? rand(4, 8) : rand(8, 18) - p * 4;
+    S.next += S.next < 160 * SC ? rand(4, 8) : rand(8, 18) - p * 4;
   }
   // tubarõezinhos nadando por baixo: não machucam, mas dá para ultrapassar
   while (S.shark < S.d + 34 && S.shark < GOAL - 60) {
     S.obs.push({ k: 't', od: S.shark, x: rand(MINX + 10, MAXX - 10), sp: rand(3, 5.5), ph: rand(0, 6), passed: 0 });
-    S.shark += rand(90, 170);
+    S.shark += rand(90, 170) * SC;
   }
   for (const o of S.obs) {
     if (o.k === 's') {
@@ -268,8 +253,7 @@ function glide(dt) {
 function updateEnt(dt) {
   for (const e of S.ent) {
     if (e.swim) {
-      // durante o tutorial o pelotão acompanha o ritmo do Pablo; na prova cada um segue o seu
-      const sp = mode === 'tut' ? S.v : e.sp;
+      const sp = e.sp;
       e.od += sp * dt; e.ph += dt * Math.max(3, sp) * 1.1; continue;
     }
     e.ph += dt * (e.run ? 13 : 5);
@@ -339,12 +323,6 @@ function update(dt) {
   T += dt;
   for (const k in press) press[k] = Math.max(0, press[k] - dt);
 
-  if (mode === 'tut') {
-    S.t += dt; glide(dt); updateEnt(dt);
-    const tu = S.tut;
-    tu.wrong = Math.max(0, tu.wrong - dt);
-    if (tu.done) { tu.done += dt; if (tu.done > 1.4) begin(); }
-  }
   if (mode === 'entry') {
     S.fade = Math.max(0, S.fade - dt * 2.5);
     if (cd > 0) {
@@ -371,7 +349,7 @@ function update(dt) {
     updateEnt(dt);
     updateObs(dt);
 
-    if (S.d >= S.ck && S.ck < GOAL) {
+    if (S.d / SC >= S.ck && S.ck < SWIM_M) {
       const n = S.ck; S.ck += 100;
       if (n === 1000) msg('PASSOU DA METADE!', '#ffe23a');
       else if (n === 1800) msg('ULTIMOS 100m!', '#ffe23a');
@@ -394,7 +372,7 @@ function update(dt) {
   if (mode === 'menu') unlockFx = Math.max(0, unlockFx - dt);
 
   // body animation
-  const gliding = (mode === 'play' || mode === 'tut') && (S.lastT < 0 || S.t - S.lastT > .6);
+  const gliding = mode === 'play' && (S.lastT < 0 || S.t - S.lastT > .6);
   if (gliding) { S.tL = 0; S.tR = 0; } // braços estendidos à frente no deslize
   S.kick += dt * (gliding ? 1.5 : 6 + S.v * 1.2);
   S.aL += (S.tL - S.aL) * Math.min(1, dt * 14);
@@ -404,12 +382,12 @@ function update(dt) {
   if (S.bub) { S.bub.age += dt; S.bub.life -= dt; if (S.bub.life <= 0) S.bub = null; }
 
   // particles
-  const scroll = (mode === 'play' || mode === 'entry' || mode === 'tut' || mode === 'bike') ? S.v * PPM : 0;
+  const scroll = (mode === 'play' || mode === 'entry' || mode === 'bike') ? S.v * PPM : 0;
   for (const p of P) {
     p.x += p.vx * dt; p.y += (p.vy + scroll) * dt; p.life -= dt;
     p.vx *= .92; if (!p.bub) p.vy += 60 * dt;
   }
-  if ((mode === 'play' || mode === 'tut') && S.v > 3 && Math.random() < S.v * dt * 3) {
+  if (mode === 'play' && S.v > 3 && Math.random() < S.v * dt * 3) {
     P.push({ x: S.x + rand(-3, 3), y: PY + 13, vx: rand(-4, 4), vy: rand(-2, 6), life: rand(.3, .6), c: '#d8f0ff', bub: 1 });
   }
   P = P.filter(p => p.life > 0);
@@ -893,9 +871,10 @@ const miniW = (str, s = 1) => str.length * 4 * s - s;
 
 // marcadores de distância a cada 100m: linha e número pintados no fundo + placas nas boias grandes
 function drawMarkers(floor) {
-  const a = Math.max(100, Math.ceil((S.d - 14) / 100) * 100), b = Math.min(GOAL - 100, S.d + 30);
+  // m = metros mostrados; a linha fica em m * SC no mundo
+  const a = Math.max(100, Math.ceil((S.d - 14) / SC / 100) * 100), b = Math.min(SWIM_M - 100, (S.d + 30) / SC);
   for (let m = a; m <= b; m += 100) {
-    const sy = Math.round(syOf(m));
+    const sy = Math.round(syOf(m * SC));
     if (sy < TOP - 20 || sy > BOT + 20) continue;
     const label = m + 'M';
     if (floor) {
@@ -934,7 +913,7 @@ function drawBuoys() {
         R(rx, sy - yy - 1, 1, 3, 'rgba(46,36,69,.35)');
         R(rx, sy - yy, 1, 1, (yy / 4) % 2 ? '#f6f0e8' : '#e8504a');
       }
-      if (m % 100 === 0 && m > 0 && m < GOAL) {
+      if (m % BIG_BUOY === 0 && m > 0 && m < GOAL) {
         R(rx - 5, sy + 4, 11, 1, PAL.foam2);
         disc(rx, sy + bob, 5, OUT);
         disc(rx, sy + bob, 4, '#e8a020');
@@ -979,18 +958,12 @@ const chip = (x, y, w, h) => { rrect(x, y, w, h, '#17122a'); R(x + 2, y + h - 1,
 const PACE = ['#4fd0dc', '#5fe08a', '#ffe23a', '#ff9a3a', '#ff5a4a'];
 function drawHUD() {
   R(0, 0, W, TOP, '#2a2140'); R(0, 0, W, 1, '#4a3d70'); R(0, TOP - 1, W, 1, OUT);
-  const tut = mode === 'tut';
-  const d = tut ? 0 : Math.max(0, Math.min(GOAL, S.d)), p = d / GOAL;
-  if (tut) {
-    chip(2, 2, 96, 12); txt('AQUECIMENTO', 6, 4, '#ffe23a');
-    const pr = Math.floor(T * 2) % 2;
-    rrect(119, 2, 59, 12, pr ? '#4a3d70' : '#3b2f5a'); R(121, 13, 55, 1, '#17122a');
-    txt('PULAR>', 124, 4, '#fff');
-  } else {
+  const d = Math.max(0, Math.min(GOAL, S.d)), p = d / GOAL;
+  {
     // distância (ícone de boia)
     chip(2, 2, 58, 12);
     disc(8, 8, 3, OUT); disc(8, 8, 2, '#ff7a2a'); R(7, 7, 1, 1, '#ffd0a0'); R(6, 9, 5, 1, '#f6f0e8');
-    txt(Math.floor(d) + 'm', 14, 4, '#fff');
+    txt(Math.min(SWIM_M, Math.floor(d / SC + 1e-6)) + 'm', 14, 4, '#fff');
     // ritmo: 5 barrinhas que acendem com a velocidade
     const lit = mode === 'play' ? Math.ceil(S.v / 16 * 5 - .15) : 0;
     for (let i = 0; i < 5; i++) {
@@ -1005,7 +978,7 @@ function drawHUD() {
     txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
   }
   // percurso: trilha com marcas a cada 500m, bandeira quadriculada e a touca do Pablo
-  drawTrack(p, [500, 1000, 1500].map(m => m / GOAL));
+  drawTrack(p, [500, 1000, 1500].map(m => m / SWIM_M));
 }
 // trilha do percurso no HUD: marcas (ticks), pontos coloridos [fração, cor] e a bandeira de chegada
 function drawTrack(p, ticks, dots = []) {
@@ -1070,19 +1043,19 @@ function panelBg() {
 function drawButtons() {
   panelBg();
   const idle = mode === 'play' && S.v < 2;
+  // largada: os dois botões piscam juntos até as primeiras braçadas; parado na prova: alterna ESQ/DIR
+  const start = (mode === 'entry' || mode === 'play') && S.strokes < 4;
   for (const b of BTNS) {
     const pr = press[b.k] > 0;
-    // brilho piscando quando está parado (alterna ESQ/DIR)
-    const tutNext = mode === 'tut' && !S.tut.done && (S.tut.last === 'L' ? 'R' : 'L') === b.k;
-    const fy = drawBtn(b, pr, (idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1)) || (tutNext && Math.floor(T * 4) % 2));
-    arrowPlate(b, Math.round(b.x + b.w / 2), fy + 22, pr);
+    const fy = drawBtn(b, pr, start ? Math.floor(T * 4) % 2 : idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1));
+    arrowPlate(b, Math.round(b.x + b.w / 2), fy + 22, pr, true);
   }
 }
 // botão 3D: sombra, contorno, lateral e face; afunda 4px quando apertado. Devolve o topo da face
 function drawBtn(b, pr, glow) {
   const FH = 44, DEPTH = 5, Y0 = BOT + 5;
   const off = pr ? 4 : 0, x = b.x, w = b.w, fy = Y0 + off;
-  if (glow) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#fff');
+  if (glow) rrect(x - 3, fy - 3, w + 6, FH + DEPTH + 6 - off, '#ffe23a'); // contorno amarelo piscante: aperte aqui
   {
     // sombra no painel, contorno, lateral 3D e face
     rrect(x + 1, Y0 + 3, w, FH + DEPTH, 'rgba(10,6,24,.45)');
@@ -1098,7 +1071,36 @@ function drawBtn(b, pr, glow) {
   return fy;
 }
 // placa redonda com a seta no centro do botão
-function arrowPlate(b, cx, cy, pr) {
+// bracinho do Pablo dando braçada (manga de neoprene preta com faixa prata), com gotinhas d'água
+const ARM_L = [
+  '.ooo..w.....',
+  'oSsso.......',
+  'ossssoo.....',
+  'osssssso....',
+  '.ooSsssso...',
+  '...oSsssso..',
+  '.w..oSssKko.',
+  '.....oSKkkko',
+  '..w...oKkkko',
+  '.......okkko',
+  '........okko',
+  '.........oo.',
+];
+const ARM_R = ARM_L.map(r => [...r].reverse().join(''));
+const ARM_C = { o: OUT, s: '#eab07a', S: '#c98a5a', k: '#2c2b36', K: '#c8cfd9', w: '#d6f8f3' };
+// arms = true: bracinhos (natação); senão setas (ciclismo)
+function arrowPlate(b, cx, cy, pr, arms = false) {
+  if (arms) {
+    // círculo azul da cor do mar
+    disc(cx, cy + 1, 14, PAL.wDeep2); disc(cx, cy, 14, PAL.wDeep); disc(cx, cy, 13, PAL.w0);
+    R(cx - 7, cy - 11, 6, 1, 'rgba(255,255,255,.35)'); R(cx - 9, cy - 9, 2, 1, 'rgba(255,255,255,.35)');
+    // apertou: o braço puxa a água para baixo
+    const pat = b.k === 'L' ? ARM_L : ARM_R, ax = cx - 12, ay = cy - 12 + (pr ? 2 : 0);
+    for (let r = 0; r < pat.length; r++) for (let c = 0; c < pat[r].length; c++) {
+      const col = ARM_C[pat[r][c]]; if (col) R(ax + c * 2, ay + r * 2, 2, 2, col);
+    }
+    return;
+  }
   {
     disc(cx, cy + 1, 14, b.dk);
     disc(cx, cy, 14, b.plate);
@@ -1113,14 +1115,6 @@ function arrowPlate(b, cx, cy, pr) {
   }
 }
 
-// seta branca quicando em cima de um botão (centro cx)
-function hintArrow(cx) {
-  const ay = BOT - 22 + Math.round(Math.abs(Math.sin(T * 6)) * 4);
-  const AR = ['.ooooo.', '.owwwo.', '.owwwo.', 'oowwwoo', 'owwwwwo', '.owwwo.', '..owo..', '...o...'];
-  for (let r = 0; r < AR.length; r++) for (let c = 0; c < 7; c++) {
-    const ch = AR[r][c]; if (ch !== '.') R(cx - 7 + c * 2, ay + r * 2, 2, 2, ch === 'o' ? OUT : '#fff');
-  }
-}
 function overlay(alpha = .72) { ctx.fillStyle = 'rgba(30,22,52,' + alpha + ')'; ctx.fillRect(0, 0, W, H); }
 function panel(y, h) { R(8, y, W - 16, h, OUT); R(10, y + 2, W - 20, h - 4, '#3b2f5a'); R(10, y + 2, W - 20, 1, '#6b5a9a'); R(10, y + h - 3, W - 20, 1, '#2a2140'); }
 
@@ -1511,26 +1505,6 @@ function draw() {
   drawHUD();
   drawButtons();
 
-  if (mode === 'tut') {
-    const tu = S.tut, ok = tu.done > 0;
-    panel(TOP + 8, 60);
-    txt(ok ? 'BOA, PABLO!' : 'COMO NADAR', W / 2, TOP + 16, '#ffe23a', 'center');
-    if (ok) txt('Bora pra largada!', W / 2, TOP + 32, '#fff', 'center');
-    else if (tu.wrong > 0) txt('Agora o outro lado!', W / 2, TOP + 32, '#ff9a6a', 'center');
-    else {
-      txt('Alterne as setas', W / 2, TOP + 28, '#fff', 'center');
-      txt('para dar bracadas', W / 2, TOP + 38, '#fff', 'center');
-    }
-    // progresso: uma casinha por braçada alternada
-    for (let i = 0; i < TUT_N; i++) {
-      const x = W / 2 - TUT_N * 7 + i * 14 + 1, y = TOP + 51, on = i < tu.n;
-      R(x, y, 12, 9, OUT); R(x + 1, y + 1, 10, 7, on ? '#3cc45a' : '#2a2140');
-      if (on) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
-    }
-    // seta quicando em cima do botão da vez
-    if (!ok) hintArrow((tu.last === 'L' ? BTNS[1] : BTNS[0]).x + 41);
-    if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
-  }
   if (mode === 'entry') {
     if (cd > 0) {
       const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
@@ -1561,8 +1535,8 @@ const isBike = () => BIKE_MODES.includes(mode);
 const hold = { L: 0, R: 0 }; // setas seguradas (toque ou teclado)
 // setas juntas na esquerda, pedal grande no canto direito
 const BBTNS = [
-  { ...BTNS[0], x: 4, w: 60 },
-  { ...BTNS[1], x: 68, w: 60 },
+  { k: 'L', x: 4, w: 60, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98', plate: '#2a8cb0' },
+  { k: 'R', x: 68, w: 60, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98', plate: '#2a8cb0' },
   { k: 'P', x: 132, w: 44, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a', plate: '#25883e' },
 ];
 const BPHR = ['PERNAS DE AÇO!', 'VOANDO BAIXO!', 'SOU UM FOGUETE!', 'NEM SUEI!', 'PEDAL DE OURO!'];
@@ -2052,7 +2026,8 @@ function bikeIcon(cx, cy, a, bg) {
 }
 function drawBikeButtons() {
   panelBg();
-  const nudge = (mode === 'bike' && S.v < 4) || mode === 'bentry';
+  // pedal pisca na largada, até as primeiras pedaladas, e quando a bike está quase parada
+  const nudge = (mode === 'bike' && S.v < 4) || mode === 'bentry' || S.taps < 3;
   for (const b of BBTNS) {
     const pr = press[b.k] > 0 || (b.k !== 'P' && hold[b.k] > 0);
     const fy = drawBtn(b, pr, b.k === 'P' && nudge && Math.floor(T * 3) % 2);
@@ -2123,8 +2098,6 @@ function drawBikeScene() {
   drawBikeHUD();
   drawBikeButtons();
 
-  // na largada: seta quicando no botão da bike até o jogador dar as primeiras pedaladas
-  if ((mode === 'bentry' || mode === 'bike') && S.taps < 3) hintArrow(Math.round(BBTNS[2].x + BBTNS[2].w / 2));
   if (mode === 'bentry' && cd > 0) {
     const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
     bigTxt(String(n), W / 2 + 2, 62 - pop, '#ffe23a', 32, '#fff6b0');
@@ -2162,7 +2135,6 @@ cv.addEventListener('pointerdown', e => {
     try { cv.setPointerCapture(e.pointerId); } catch (err) {}
     return;
   }
-  if (mode === 'tut' && (e.clientY - r.top) * H / r.height < TOP) { if ((e.clientX - r.left) * W / r.width > W / 2) begin(); return; }
   const k = btnAt((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
   if (k) swim(k);
 });
@@ -2189,7 +2161,6 @@ addEventListener('keydown', e => {
   }
   if (canRestart() && (k === ' ' || k === 'enter' || k === 'arrowleft' || k === 'arrowright')) { advance(); return; }
   if (isBike()) { const b = keyOf(k); if (b) bikeKey(b, true); return; }
-  if (mode === 'tut' && (k === ' ' || k === 'enter')) { begin(); return; }
   if (k === 'arrowleft' || k === 'a') swim('L');
   else if (k === 'arrowright' || k === 'd') swim('R');
 });
