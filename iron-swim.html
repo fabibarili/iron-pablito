@@ -398,7 +398,7 @@ function update(dt) {
   if (S.bub) { S.bub.age += dt; S.bub.life -= dt; if (S.bub.life <= 0) S.bub = null; }
 
   // particles
-  const scroll = (mode === 'play' || mode === 'entry' || mode === 'bike' || mode === 'run') ? S.v * PPM : 0;
+  const scroll = (mode === 'play' || mode === 'entry' || mode === 'bike' || mode === 'run' || mode === 'rtut') ? S.v * PPM : 0;
   for (const p of P) {
     p.x += p.vx * dt; p.y += (p.vy + scroll) * dt; p.life -= dt;
     p.vx *= .92; if (!p.bub) p.vy += 60 * dt;
@@ -2254,7 +2254,7 @@ function drawBikeScene() {
 /* ---------- corrida ---------- */
 // 1600m na tela = 21,1km na prova. Mesma pista (BRX0..BRX1) e câmera do ciclismo
 const RGOAL = 1600, RKM = 21.1 / RGOAL, RUN_END = RGOAL + 14;
-const RUN_MODES = ['rintro', 'rentry', 'run', 'rwin'];
+const RUN_MODES = ['rtut', 'rentry', 'run', 'rwin'];
 const isRun = () => RUN_MODES.includes(mode);
 // segurar o botão de correr acelera até RVMAX; soltar vai freando. Correr gasta energia, parado recupera
 const RVMAX = 17, WINE_T = 4;
@@ -2280,15 +2280,69 @@ function newRunStage() {
 }
 const newJogger = (od, x = rand(BMINX + 4, BMAXX - 4)) => ({ k: 'r', od, x, sp: rand(7, 12.5), ph: rand(0, 6), dr: rand(0, 6), hair: pick(JOG_HAIR), shirt: pick(JOG_SHIRT), hit: 0, wob: 0, thr: Math.random() < .5, thrown: 0, taunt: 0 });
 
-// menu -> instruções -> contagem -> prova
+// menu -> aquecimento prático (correr, desviar, água, gel) -> largada com contagem -> prova
+const RTUT_N = 5, RTUT_T = .3; // 5 casinhas, cada uma enche com 0,3s segurando o botão de correr
 function openRun() {
   audio();
   S = newRunStage(); P = []; M = []; hold.L = hold.R = hold.P = 0;
-  for (const [x, od] of [[56, -2], [72, -3.4], [110, -2.2], [126, -3.2], [64, -.8], [118, -.6]]) S.obs.push(Object.assign(newJogger(od, x), { thr: 0 }));
-  mode = 'rintro';
+  S.d = -900; // trecho de aquecimento bem antes da largada
+  S.tut = { step: 0, n: 0, done: 0, wrong: 0, ok: 0 };
+  mode = 'rtut';
   tone(660, .08); tone(990, .12, 'square', .06, 0, .08);
 }
-function startRunCountdown() { mode = 'rentry'; cd = 3; tone(440, .12); }
+function startRunRace() {
+  S = newRunStage(); P = []; M = []; hold.L = hold.R = hold.P = 0;
+  for (const [x, od] of [[56, -2], [72, -3.4], [110, -2.2], [126, -3.2], [64, -.8], [118, -.6]]) S.obs.push(Object.assign(newJogger(od, x), { thr: 0 }));
+  mode = 'rentry'; cd = 3; tone(440, .12);
+}
+// passos do aquecimento: 0 correr, 1 desviar do cone, 2 pegar água, 3 pegar gel
+function rtutNext() {
+  const tu = S.tut;
+  tu.step++; tu.ok = 0; tu.wrong = 0;
+  [659, 784, 1046].forEach((f, i) => tone(f, .12, 'square', .05, 0, i * .08));
+  if (tu.step === 1) rtutCone();
+  else if (tu.step === 2) { S.hy = .3; rtutItem('w'); say('PRECISO DE ÁGUA!', '#2b6cb0'); }
+  else if (tu.step === 3) { S.en = .3; rtutItem('g'); say('PRECISO DE UM GEL!', '#d8762a'); }
+  else { tu.done = .001; say('BORA PRA LARGADA!'); }
+}
+function rtutCone() { S.obs = [{ k: 'o', od: S.d + 18, x: Math.min(BMAXX - 4, Math.max(BMINX + 4, S.x)), hit: 0 }]; }
+// item sempre do lado oposto ao do Pablo, para ele ter que atravessar a pista
+function rtutItem(k) { S.items = [{ k, od: S.d + 24, x: S.x < 90 ? BMAXX - 10 : BMINX + 10, got: 0 }]; }
+function updateRunTut(dt) {
+  const tu = S.tut;
+  tu.wrong = Math.max(0, tu.wrong - dt);
+  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt);
+  runStep(dt);
+  // no aquecimento o Pablo nunca para de vez (o cone e os itens chegam até ele) e não passa de 12 m/s
+  if (tu.step > 0 && S.v < 5) S.v = 5;
+  S.v = Math.min(S.v, 12);
+  if (tu.done) { tu.done += dt; if (tu.done > 1.4) startRunRace(); return; }
+  if (tu.ok) { tu.ok += dt; if (tu.ok > .7) rtutNext(); return; }
+  if (tu.step === 0) {
+    if (hold.P) {
+      const before = Math.floor(tu.n / RTUT_T);
+      tu.n += dt;
+      const now = Math.min(RTUT_N, Math.floor(tu.n / RTUT_T));
+      if (now > before) tone(520 + now * 80, .08, 'square', .05);
+      if (now >= RTUT_N) tu.ok = .001;
+    }
+  } else if (tu.step === 1) {
+    const o = S.obs[0];
+    if (!o.hit && Math.abs(o.od - S.d) * PPM < 6 && Math.abs(o.x - S.x) < 8) {
+      o.hit = 1; S.v *= .5; S.flash = .25; S.shake = .3; S.inv = .5; tu.wrong = 1.2;
+      say('TROPECEI NO CONE!', '#c8402a'); noise(.2, .25, 700); tone(160, .2, 'square', .06, -60);
+    }
+    if (S.d > o.od + 2) { if (o.hit) rtutCone(); else { tu.ok = .001; say('DESVIEI!'); } }
+  } else {
+    const it = S.items[0];
+    if (Math.abs(it.od - S.d) * PPM < 8 && Math.abs(it.x - S.x) < 9) {
+      it.got = 1; tu.ok = .001; S.items = [];
+      if (it.k === 'w') { S.hy = 1; say('ÁGUA GELADA!', '#2b6cb0'); splash(S.x, PY - 8, 12, '#8ae3de'); }
+      else { S.en = 1; say('ENERGIA!', '#d8762a'); splash(S.x, PY - 8, 12, '#ffb35a'); }
+      [784, 988, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .06));
+    } else if (S.d > it.od + 1.6) { tu.wrong = 1.2; tone(220, .2, 'square', .05, -60); rtutItem(it.k); }
+  }
+}
 
 // velocidade máxima: sem energia ou sem água o Pablo só anda; com pouco, corre bem menos; vinho deixa lento
 function runVmax() {
@@ -2352,22 +2406,8 @@ function spawnRun() {
   }
 }
 
-function updateRun(dt) {
-  S.fade = Math.max(0, S.fade - dt * 2.5);
-  for (const o of S.obs) if (o.k === 'r') o.ph += dt * 5; // aquecendo na largada
-  if (mode === 'rintro') { S.ph += dt * 5; return; }
-  if (mode === 'rentry') {
-    S.ph += dt * 5;
-    const prev = Math.ceil(cd);
-    cd -= dt;
-    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
-    if (cd <= 0) { mode = 'run'; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
-    return;
-  }
-  if (mode === 'rwin') { updateRunEnd(dt); return; }
-  S.t += dt;
-  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnE -= dt; S.warnH -= dt;
-
+// movimento do Pablo: segurar o botão acelera, soltar freia; setas mudam de faixa; passada com som
+function runStep(dt) {
   S.wine = Math.max(0, S.wine - dt);
   // segurando o botão: acelera até o máximo; soltou: vai freando até parar
   const vm = runVmax();
@@ -2386,6 +2426,26 @@ function updateRun(dt) {
   // passada: um passo a cada meia volta da animação
   const step = Math.floor(S.ph / Math.PI);
   if (step !== S.step) { S.step = step; if (S.v > 1) tone(90 + S.v * 4, .03, 'triangle', .03); }
+
+}
+
+function updateRun(dt) {
+  S.fade = Math.max(0, S.fade - dt * 2.5);
+  for (const o of S.obs) if (o.k === 'r') o.ph += dt * 5; // aquecendo na largada
+  if (mode === 'rtut') { updateRunTut(dt); return; }
+  if (mode === 'rentry') {
+    S.ph += dt * 5;
+    const prev = Math.ceil(cd);
+    cd -= dt;
+    if (Math.ceil(cd) !== prev && cd > 0) tone(440, .12);
+    if (cd <= 0) { mode = 'run'; tone(880, .4, 'square', .08); msg('VAI! VAI! VAI!', '#ffe23a'); }
+    return;
+  }
+  if (mode === 'rwin') { updateRunEnd(dt); return; }
+  S.t += dt;
+  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnE -= dt; S.warnH -= dt;
+
+  runStep(dt);
 
   // energia gasta correndo (mais quanto mais rápido) e volta parado/andando; água gasta sempre
   const sp = S.v / RVMAX;
@@ -2542,6 +2602,25 @@ function drawBanana(x, y, h = 0) {
   const pat = h > 1 && Math.floor(T * 10) % 2 ? flip(BANANA) : BANANA;
   outlinedPattern(pat, BAN_C, x - 6, y - 3 - Math.round(h), OUT);
 }
+// copo d'água, sachê de gel ou garrafa de vinho, flutuando com brilho
+function drawItem(it) {
+  const x = Math.round(it.x), y = Math.round(syOf(it.od)) + 4, b = Math.sin(T * 5 + it.od) > 0 ? -1 : 0;
+  if (y < TOP - 14 || y > BOT + 10) return;
+  R(x - 3, y + 2, 7, 2, 'rgba(20,14,30,.3)');
+  if (it.k === 'w') {
+    spr([[x - 2, y - 6 + b, 5, 7, '#f6f0e8']]);
+    R(x - 2, y - 6 + b, 5, 2, '#4fb8f0'); R(x - 1, y - 6 + b, 1, 1, '#d6f8ff'); R(x + 2, y - 4 + b, 1, 5, '#cfc6b8');
+  } else if (it.k === 'v') {
+    // garrafa verde-escura com rótulo e lacre vinho
+    spr([[x - 2, y - 7 + b, 5, 9, '#24502e'], [x - 1, y - 10 + b, 3, 3, '#24502e']]);
+    R(x - 1, y - 11 + b, 3, 1, '#8a1a3a'); R(x - 2, y - 4 + b, 5, 3, '#f6f0e8'); R(x - 1, y - 3 + b, 3, 1, '#8a1a3a');
+    R(x - 2, y - 7 + b, 1, 3, '#4a8a5a');
+  } else {
+    spr([[x - 2, y - 7 + b, 5, 8, '#ff7a1a'], [x - 1, y - 9 + b, 3, 2, '#ff7a1a']]);
+    R(x - 2, y - 7 + b, 5, 1, '#ffb35a'); R(x - 1, y - 4 + b, 3, 2, '#ffe23a'); R(x + 2, y - 6 + b, 1, 7, '#c85a12');
+  }
+  if (Math.floor(T * 4 + it.od) % 4 === 0) { R(x + 4, y - 10 + b, 1, 3, '#fff'); R(x + 3, y - 9 + b, 3, 1, '#fff'); }
+}
 function drawRunObs(o) {
   const y = Math.round(syOf(o.od));
   if (y < TOP - 26 || y > BOT + 14) return;
@@ -2569,7 +2648,7 @@ function drawRunWorld() {
       R(gx, gy, 1, 2, '#4f9a36'); R(gx + 2, gy + 1, 1, 1, '#4f9a36');
     }
   }
-  const ya = Math.max(TOP, Math.round(syOf(RGOAL + 60))), yb = Math.min(BOT, Math.round(syOf(-60)));
+  const ya = Math.max(TOP, Math.round(syOf(RGOAL + 60))), yb = Math.min(BOT, Math.round(syOf(-1000)));
   if (yb > ya) {
     // calçadas de concreto com juntas
     for (const sx of [BRX0 - 12, BRX1 + 1]) {
@@ -2614,7 +2693,7 @@ function drawRunWorld() {
   // decoração nas laterais em blocos de 8m
   for (let k = Math.floor((S.d + 26) / 8); k >= Math.floor((S.d - 10) / 8); k--) {
     const od = k * 8;
-    if (R_CROWD(od) || od < -60 || od > RGOAL + 60) continue;
+    if (R_CROWD(od) || od < -1000 || od > RGOAL + 60) continue;
     const y = Math.round(syOf(od));
     for (const sd of [-1, 1]) {
       const h = hash(k, sd > 0 ? 501 : 502), jx = Math.round((hash(k, sd > 0 ? 503 : 504) - .5) * 4);
@@ -2655,6 +2734,13 @@ function resBar(x, y, w, v, col) {
 }
 function drawRunHUD() {
   R(0, 0, W, TOP, '#2a2140'); R(0, 0, W, 1, '#4a3d70'); R(0, TOP - 1, W, 1, OUT);
+  if (mode === 'rtut') {
+    chip(2, 2, 96, 12); txt('AQUECIMENTO', 6, 4, '#ffe23a');
+    rrect(119, 2, 59, 12, Math.floor(T * 2) % 2 ? '#4a3d70' : '#3b2f5a'); R(121, 13, 55, 1, '#17122a');
+    txt('PULAR>', 124, 4, '#fff');
+    drawTrack(Math.min(1, (S.tut.step + (S.tut.ok || S.tut.done ? 1 : 0)) / 4), [.25, .5, .75]);
+    return;
+  }
   const d = Math.max(0, Math.min(RGOAL, S.d));
   // distância em km (ícone de tênis)
   chip(2, 2, 64, 12);
@@ -2682,7 +2768,7 @@ const RUN_POSE = [
     fl: [[16, 24], [14, 29], [18, 29]], bl: [[8, 22], [4, 18], [3, 20]] },
 ];
 function runIcon(cx, cy, pr) {
-  const moving = S.v > 1 && (mode === 'run' || mode === 'rwin');
+  const moving = S.v > 1 && (mode === 'run' || mode === 'rwin' || mode === 'rtut');
   const P0 = RUN_POSE[moving && Math.sin(S.ph) > 0 ? 1 : 0];
   const ax = cx - 13, ay = cy - 16 + (pr ? 1 : 0);
   const seg = (a, b, th, c) => {
@@ -2716,7 +2802,7 @@ function runIcon(cx, cy, pr) {
 function drawRunButtons() {
   panelBg();
   // botão de correr pisca na largada, até as primeiras passadas, e quando o Pablo está quase parado
-  const nudge = mode === 'rentry' || (mode === 'run' && (S.v < 3 || S.held < .6));
+  const nudge = mode === 'rtut' ? S.tut.step === 0 && !S.tut.ok && !S.tut.done : mode === 'rentry' || (mode === 'run' && (S.v < 3 || S.held < .6));
   for (const b of RBTNS) {
     const pr = press[b.k] > 0 || hold[b.k] > 0;
     const fy = drawBtn(b, pr, b.k === 'P' && nudge && Math.floor(T * 3) % 2);
@@ -2725,13 +2811,30 @@ function drawRunButtons() {
     else arrowPlate(b, cx, fy + 22, pr);
   }
 }
-function drawRunIntro() {
-  panel(TOP + 12, 128);
-  txt('CORRIDA 21,1KM', W / 2, TOP + 20, '#ffe23a', 'center');
-  ['Segure o tenis', 'para correr', 'Setas: desvie', 'Pegue agua e gel', 'Vinho e depois!'].forEach((t, i) => txt(t, W / 2, TOP + 38 + i * 12, i === 4 ? '#ff9a6a' : '#fff', 'center'));
-  const iod = S.d + (PY - TOP - 108) / PPM;
-  drawItem({ k: 'w', x: 70, od: iod }); drawItem({ k: 'g', x: 90, od: iod }); drawItem({ k: 'v', x: 110, od: iod });
-  if (Math.floor(T * 2.5) % 2) txt('TOQUE PARA IR!', W / 2, TOP + 120, '#8ae3de', 'center');
+// painel do aquecimento: instrução do passo, casinhas de progresso e seta quicando no botão certo
+function drawRunTut() {
+  const tu = S.tut;
+  panel(TOP + 8, 62);
+  const TIT = ['CORRA!', 'DESVIE!', 'HIDRATE!', 'ENERGIA!'];
+  const LIN = [['Segure o botao', 'para correr'], ['Segure a seta e', 'desvie do cone'], ['Passe por cima', 'do copo de agua'], ['Passe por cima', 'do gel']];
+  txt(tu.done ? 'BOA, PABLO!' : TIT[tu.step], W / 2, TOP + 15, '#ffe23a', 'center');
+  if (tu.done) txt('Bora pra largada!', W / 2, TOP + 31, '#fff', 'center');
+  else if (tu.wrong > 0) txt('Tente de novo!', W / 2, TOP + 31, '#ff9a6a', 'center');
+  else LIN[tu.step].forEach((t, i) => txt(t, W / 2, TOP + 27 + i * 10, '#fff', 'center'));
+  // passo 1: casinhas enchem enquanto segura o botão; depois: uma casinha por passo
+  const first = tu.step === 0 && !tu.done, n = first ? RTUT_N : 4, on = first ? Math.floor(tu.n / RTUT_T) : tu.step + (tu.ok || tu.done ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const x = W / 2 - n * 7 + i * 14 + 1, y = TOP + 53, lit = i < on;
+    R(x, y, 12, 9, OUT); R(x + 1, y + 1, 10, 7, lit ? '#3cc45a' : '#2a2140');
+    if (lit) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
+  }
+  if (!tu.done && !tu.ok) {
+    let b = RBTNS[2];
+    if (tu.step === 1) { const o = S.obs[0]; b = o && Math.abs(o.x - S.x) < 10 ? RBTNS[S.x >= o.x ? 1 : 0] : null; }
+    if (tu.step >= 2) { const it = S.items[0]; b = !it || Math.abs(it.x - S.x) < 6 ? null : RBTNS[it.x < S.x ? 0 : 1]; }
+    if (b) hintArrow(Math.round(b.x + b.w / 2));
+  }
+  if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
 }
 function drawRunResults() {
   const k = Math.min(1, (S.endT - 2.5) * 3);
@@ -2760,7 +2863,7 @@ function drawRunScene() {
   for (const o of S.obs) list.push([o.od, () => drawRunObs(o)]);
   list.push([pod, () => {
     if (S.inv > 0 && Math.floor(T * 14) % 2) return;
-    const moving = mode === 'run' ? S.v > .5 : mode === 'rwin' && !S.done;
+    const moving = mode === 'run' || mode === 'rtut' ? S.v > .5 : mode === 'rwin' && !S.done;
     drawRunner(S.x, py + 8, '#2a1c18', S.ph, moving ? 1 : 0, 0, '#40424e', 'run');
   }]);
   list.sort((a, b) => b[0] - a[0]).forEach(e => e[1]());
@@ -2776,7 +2879,7 @@ function drawRunScene() {
 
   drawRunHUD();
   drawRunButtons();
-  if (mode === 'rintro') drawRunIntro();
+  if (mode === 'rtut') drawRunTut();
   if (mode === 'rentry' && cd > 0) {
     const n = Math.ceil(cd), pop = cd % 1 > .85 ? 2 : 0;
     bigTxt(String(n), W / 2 + 2, 62 - pop, '#ffe23a', 32, '#fff6b0');
@@ -2816,8 +2919,7 @@ cv.addEventListener('pointerdown', e => {
   }
   if (isRun()) {
     const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
-    if (mode === 'rintro') { startRunCountdown(); return; }
-    if (y < TOP) return;
+    if (y < TOP) { if (mode === 'rtut' && x > W / 2) startRunRace(); return; }
     // faixas da tela iguais aos botões: setas na esquerda, correr na direita
     const k = x < 66 ? 'L' : x < 130 ? 'R' : 'P';
     ptrs[e.pointerId] = k; bikeKey(k, true);
@@ -2852,7 +2954,7 @@ addEventListener('keydown', e => {
   if (mode === 'btut' && k === 'escape') { startBike(); return; }
   if (isBike()) { const b = keyOf(k); if (b) bikeKey(b, true); return; }
   if (isRun()) {
-    if (mode === 'rintro') { if (KEYS.includes(k)) startRunCountdown(); return; }
+    if (mode === 'rtut' && k === 'escape') { startRunRace(); return; }
     const b = keyOf(k); if (b) bikeKey(b, true);
     return;
   }
