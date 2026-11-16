@@ -100,7 +100,7 @@ try { localStorage.removeItem('ironswim_best'); localStorage.removeItem('iron703
 let best = null;
 const lastTimes = [null, null, null]; // tempo da última prova de cada etapa (para o quadro final)
 // progresso: quantas etapas estão liberadas (1 = só natação). Concluir uma etapa libera a próxima
-let unlocked = 1;
+let unlocked = 3; // TESTE: todas as etapas liberadas (voltar para 1 depois)
 function unlockStage(n) {
   if (n <= unlocked) return false;
   unlocked = Math.min(3, n);
