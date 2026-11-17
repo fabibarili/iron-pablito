@@ -18,7 +18,7 @@
 (() => {
 const W = 180, H = 320, TOP = 24, BOT = 258, PY = 206, PPM = 8;
 // natação: SWIM_M/SC definem o percurso na tela (1m de SWIM_M = SC m do mundo); o HUD mostra SWIM_SHOW (3,8km)
-const SWIM_M = 1900, SC = .7, SWIM_SHOW = 3800, SWX = SWIM_SHOW / SWIM_M, GOAL = Math.round(SWIM_M * SC), BIG_BUOY = Math.round(100 * SC);
+const SWIM_M = 1900, SC = .56, SWIM_SHOW = 3800, SWX = SWIM_SHOW / SWIM_M, GOAL = Math.round(SWIM_M * SC), BIG_BUOY = 100 * SC, BUOY_STEP = BIG_BUOY / 11;
 const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
 let ctx = cv.getContext('2d');
@@ -942,8 +942,8 @@ function drawMarkers(floor) {
 }
 
 function drawBuoys() {
-  const a = Math.max(0, Math.floor((S.d - 14) / 5) * 5), b = Math.min(GOAL, S.d + 30);
-  for (let m = a; m <= b; m += 5) {
+  const k0 = Math.max(0, Math.floor((S.d - 14) / BUOY_STEP)), b = Math.min(GOAL, S.d + 30);
+  for (let k = k0, m = k * BUOY_STEP; m <= b; k++, m = k * BUOY_STEP) {
     const sy = Math.round(syOf(m));
     if (sy < TOP - 8 || sy > BOT + 8) continue;
     const bob = Math.sin(T * 3 + m) > 0 ? 1 : 0;
@@ -953,7 +953,7 @@ function drawBuoys() {
         R(rx, sy - yy - 1, 1, 3, 'rgba(46,36,69,.35)');
         R(rx, sy - yy, 1, 1, (yy / 4) % 2 ? '#f6f0e8' : '#e8504a');
       }
-      if (m % BIG_BUOY === 0 && m > 0 && m < GOAL) {
+      if (k % 11 === 0 && m > 0 && m < GOAL) {
         R(rx - 5, sy + 4, 11, 1, PAL.foam2);
         disc(rx, sy + bob, 5, OUT);
         disc(rx, sy + bob, 4, '#e8a020');
@@ -1603,8 +1603,8 @@ function drawMsgs() {
 }
 
 /* ---------- ciclismo ---------- */
-// pista de 2100m na tela = 180km na prova. Asfalto de BRX0 a BRX1
-const BGOAL = 2100, BKM = 180 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
+// pista de 1680m na tela = 180km na prova. Asfalto de BRX0 a BRX1
+const BGOAL = 1680, BKM = 180 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
 const BVMAX = 24, KM10 = BGOAL / 9, BROAD_END = BGOAL + 8, DIS_OD = BGOAL + 13, RACK_X = 74, RUN_X = 94;
 const BIKE_MODES = ['btut', 'bentry', 'bike', 'bwin'];
 // dificuldade: 0.8 = 20% mais fácil (obstáculos mais espaçados, fôlego dura mais, cachorros mais lentos)
@@ -2233,8 +2233,8 @@ function drawBikeScene() {
 }
 
 /* ---------- corrida ---------- */
-// 1600m na tela = 42km na prova. Mesma pista (BRX0..BRX1) e câmera do ciclismo
-const RGOAL = 1600, RKM = 42 / RGOAL, RUN_END = RGOAL + 14;
+// 1280m na tela = 42km na prova. Mesma pista (BRX0..BRX1) e câmera do ciclismo
+const RGOAL = 1280, RKM = 42 / RGOAL, RUN_END = RGOAL + 14;
 const RUN_MODES = ['rentry', 'run', 'rwin'];
 const isRun = () => RUN_MODES.includes(mode);
 // segurar o botão de correr acelera até RVMAX; soltar vai freando. Correr gasta energia, parado recupera
