@@ -1433,8 +1433,9 @@ function drawMenu() {
   ctx.drawImage(menuBg(), 0, 0);
 
   // título com brilho na metade de cima
-  bigTxt('IRON 70.3', W / 2, 14, '#ff7a1a', 16, '#ffb35a');
-  if (ironCount > 0) ironBadge(38); else txt('AJUDE O PABLO!', W / 2, 38, '#fff', 'center');
+  // prova completa: o título vira o selo do Pablo Ironman
+  if (ironCount > 0) ironBadge(12);
+  else { bigTxt('IRON 70.3', W / 2, 14, '#ff7a1a', 16, '#ffb35a'); txt('AJUDE O PABLO!', W / 2, 38, '#fff', 'center'); }
 
   const GY = 230, s = 3;
   // Pablo da etapa selecionada (células de 3px, sem contorno)
@@ -1496,26 +1497,27 @@ function drawMenu() {
   else if (unl) txt('EM BREVE', W / 2, by + 6, '#f0ecfa', 'center');
   else { lockIcon(bx + 8, by + 5, '#f0ecfa'); txt('BLOQUEADA', W / 2 + 6, by + 6, '#f0ecfa', 'center'); }
 }
-// troféu dourado de 9x10 px (sem contorno, direto sobre o fundo)
-function trophyIcon(x, y) {
-  const G = '#ffd23a', g = '#d89a1a', L = '#fff6b0';
-  R(x, y, 9, 1, G); R(x, y + 1, 1, 2, G); R(x + 8, y + 1, 1, 2, G); // alças
-  R(x + 1, y, 7, 5, G); R(x + 2, y + 5, 5, 1, G); R(x + 3, y + 6, 3, 1, g); R(x + 4, y + 7, 1, 1, g);
-  R(x + 2, y + 8, 5, 1, G); R(x + 1, y + 9, 7, 1, g);
-  R(x + 2, y + 1, 1, 3, L); R(x + 6, y + 1, 1, 4, g);
+// troféu dourado de 9x10 células (s = tamanho da célula), sem contorno
+function trophyIcon(x, y, s = 1) {
+  const G = '#ffd23a', g = '#d89a1a', L = '#fff6b0', r = (a, b, w, h, c) => R(x + a * s, y + b * s, w * s, h * s, c);
+  r(0, 0, 9, 1, G); r(0, 1, 1, 2, G); r(8, 1, 1, 2, G); // alças
+  r(1, 0, 7, 5, G); r(2, 5, 5, 1, G); r(3, 6, 3, 1, g); r(4, 7, 1, 1, g);
+  r(2, 8, 5, 1, G); r(1, 9, 7, 1, g);
+  r(2, 1, 1, 3, L); r(6, 1, 1, 4, g);
 }
-// selo de quem já completou a prova: "PABLO IRONMAN 70.3" e, na linha de baixo, o número de vezes e o troféu
+// título de quem completou a prova: "PABLO IRONMAN 70.3" todo em dourado numa linha só,
+// e embaixo o número de vezes com o troféu, os dois apoiados na mesma linha de base
 function ironBadge(y) {
-  ctx.font = '8px ' + FONT_BUB; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-  const label = 'PABLO IRONMAN 70.3', cnt = ironCount + 'x';
-  const tw = Math.round(ctx.measureText(label).width), cw = Math.round(ctx.measureText(cnt).width);
-  const lx = Math.round(W / 2 - tw / 2);
-  ctx.fillStyle = OUT; ctx.fillText(label, lx + 1, y + 1);
-  ctx.fillStyle = '#fff'; ctx.fillText(label, lx, y);
-  const w = cw + 3 + 9, x = Math.round(W / 2 - w / 2), y2 = y + 12;
-  ctx.fillStyle = OUT; ctx.fillText(cnt, x + 1, y2 + 2);
-  ctx.fillStyle = Math.floor(T * 2) % 2 ? '#fff6b0' : '#ffe23a'; ctx.fillText(cnt, x, y2 + 1);
-  trophyIcon(x + cw + 3, y2);
+  bigTxt('PABLO IRONMAN 70.3', W / 2, y + 6, '#ffd23a', 9, '#fff6b0');
+  // brilhinhos piscando em volta do título
+  for (let i = 0; i < 4; i++) if (Math.floor(T * 3 + i * 1.7) % 4 === 0) {
+    const sx = [10, 170, 16, 164][i], sy = y + [0, 2, 22, 21][i];
+    R(sx, sy - 2, 1, 5, '#fff6b0'); R(sx - 2, sy, 5, 1, '#fff6b0');
+  }
+  ctx.font = '8px ' + FONT; const cnt = ironCount + 'X', cw = Math.round(ctx.measureText(cnt).width);
+  const w = cw + 3 + 9, x = Math.round(W / 2 - w / 2), y2 = y + 9; // logo abaixo do título
+  txt(cnt, x, y2 + 12, Math.floor(T * 2) % 2 ? '#fff6b0' : '#ffe23a'); // base do texto = base do troféu
+  trophyIcon(x + cw + 3, y2 + 10); // troféu pequeno, da altura do texto
 }
 // cadeado de 7x9 px
 function lockIcon(x, y, c) {
