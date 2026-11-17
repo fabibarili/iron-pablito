@@ -1084,7 +1084,7 @@ function drawButtons() {
   panelBg();
   const idle = mode === 'play' && S.v < 2;
   // largada: os dois botões piscam juntos até as primeiras braçadas; parado na prova: alterna ESQ/DIR
-  const start = (mode === 'entry' || mode === 'play') && S.strokes < 4;
+  const start = !S.noFtue && (mode === 'entry' || mode === 'play') && S.strokes < 4;
   for (const b of BTNS) {
     const pr = press[b.k] > 0;
     const fy = drawBtn(b, pr, start ? Math.floor(T * 4) % 2 : idle && Math.floor(T * 3) % 2 === (b.k === 'L' ? 0 : 1));
@@ -2152,7 +2152,7 @@ function bikeIcon(cx, cy, a, bg) {
 function drawBikeButtons() {
   panelBg();
   // pedal pisca na largada, até as primeiras pedaladas, e quando a bike está quase parada
-  const nudge = mode === 'btut' ? S.tut.step === 0 && !S.tut.done : (mode === 'bike' && S.v < 4) || mode === 'bentry' || S.held < .6;
+  const nudge = mode === 'btut' ? S.tut.step === 0 && !S.tut.done : (mode === 'bike' && S.v < 4) || (!S.noFtue && (mode === 'bentry' || S.held < .6));
   for (const b of BBTNS) {
     const pr = press[b.k] > 0 || hold[b.k] > 0;
     const fy = drawBtn(b, pr, b.k === 'P' && nudge && Math.floor(T * 3) % 2);
@@ -2165,6 +2165,7 @@ function drawBikeButtons() {
 // painel do aquecimento: instrução do passo, casinhas de progresso e seta quicando no botão certo
 function drawBikeTut() {
   const tu = S.tut;
+  ctx.save(); ctx.translate(0, 14); // abaixo do botão de pause
   panel(TOP + 8, 62);
   const TIT = ['PEDALE!', 'HIDRATE!'];
   const LIN = [['Segure a bike', 'para pedalar'], ['Use as setas e', 'passe no posto']];
@@ -2179,6 +2180,7 @@ function drawBikeTut() {
     R(x, y, 12, 9, OUT); R(x + 1, y + 1, 10, 7, lit ? '#3cc45a' : '#2a2140');
     if (lit) { R(x + 1, y + 1, 10, 1, '#8cf09a'); R(x + 3, y + 5, 2, 2, '#fff'); R(x + 5, y + 4, 1, 2, '#fff'); R(x + 6, y + 3, 1, 2, '#fff'); R(x + 7, y + 2, 1, 2, '#fff'); }
   }
+  ctx.restore();
   if (!tu.done && !tu.ok) {
     let b = BBTNS[2];
     if (tu.step === 1) { const w = S.water[0], near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30; b = near ? null : BBTNS[w.side < 0 ? 0 : 1]; }
@@ -2786,7 +2788,7 @@ function runIcon(cx, cy, pr) {
 function drawRunButtons() {
   panelBg();
   // largada: os três botões piscam juntos até as primeiras passadas (igual à natação); parado na prova: só o de correr
-  const start = mode === 'rentry' || (mode === 'run' && S.held < .6);
+  const start = !S.noFtue && (mode === 'rentry' || (mode === 'run' && S.held < .6));
   const idle = mode === 'run' && S.v < 3;
   for (const b of RBTNS) {
     const pr = press[b.k] > 0 || hold[b.k] > 0;
@@ -3087,6 +3089,54 @@ function drawFim() {
   if (S.endT < .6) overlay(1 - S.endT / .6);
 }
 
+/* ---------- pause ---------- */
+// botão de pause no canto direito, logo abaixo da HUD, em todo gameplay (largada, aquecimento e prova)
+const PAUSE_MODES = ['entry', 'play', 'btut', 'bentry', 'bike', 'rentry', 'run'];
+const PB = { x: W - 18, y: TOP + 3, s: 15 };
+const PAUSE_BTNS = [
+  { k: 'restart', t: 'RESTART', x: 34, w: 112, y: 140, h: 22, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a' },
+  { k: 'menu', t: 'MENU', x: 34, w: 112, y: 172, h: 22, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98' },
+];
+let paused = false;
+const canPause = () => PAUSE_MODES.includes(mode);
+const onPauseBtn = (x, y) => x >= PB.x - 4 && y >= TOP && y <= PB.y + PB.s + 4;
+function releaseAll() { hold.L = hold.R = hold.P = 0; for (const k in press) press[k] = 0; for (const k in ptrs) delete ptrs[k]; }
+function setPause(on) {
+  paused = on; releaseAll();
+  tone(on ? 520 : 660, .06, 'square', .05);
+}
+function drawPauseBtn() {
+  const { x, y, s } = PB;
+  rrect(x - 1, y - 1, s + 2, s + 2, OUT);
+  rrect(x, y, s, s, 'rgba(42,33,64,.85)');
+  R(x + 2, y + 1, s - 4, 1, '#6b5a9a');
+  R(x + 4, y + 4, 3, s - 8, '#fff'); R(x + s - 7, y + 4, 3, s - 8, '#fff');
+}
+function drawPause() {
+  overlay(.72);
+  panel(98, 110);
+  txt('PAUSA', W / 2, 114, '#ffe23a', 'center');
+  for (const b of PAUSE_BTNS) {
+    const fy = drawBtn(b, false, false);
+    txt(b.t, W / 2, fy + 7, '#fff', 'center');
+  }
+}
+function pauseTap(x, y) {
+  const b = PAUSE_BTNS.find(b => x >= b.x && x < b.x + b.w && y >= b.y - 3 && y < b.y + b.h + 6);
+  if (b) pauseAction(b.k);
+}
+function pauseAction(k) {
+  const stage = isBike() ? 1 : isRun() ? 2 : 0;
+  paused = false; releaseAll(); tone(660, .08);
+  if (k === 'restart') {
+    // recomeça direto na largada, sem o FTUE (aquecimento da bike e botões piscando)
+    if (stage === 0) start(); else if (stage === 1) startBike(); else { audio(); startRunRace(); }
+    S.noFtue = true;
+  } else {
+    mode = 'menu'; msel = stage; S = newRun(); P = []; M = [];
+  }
+}
+
 /* ---------- input ---------- */
 function canRestart() { return (mode === 'win' && S.endT > 1) || (mode === 'bwin' && S.endT > 2) || (mode === 'rwin' && S.done) || (mode === 'fim' && S.endT > FIM_DONE); }
 // fim da etapa -> volta ao menu já na próxima etapa (n = índice da etapa seguinte)
@@ -3106,6 +3156,11 @@ let secretTap = -9;
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); audio();
   const r = cv.getBoundingClientRect();
+  if (paused || canPause()) {
+    const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+    if (paused) { pauseTap(x, y); return; }
+    if (onPauseBtn(x, y)) { setPause(true); return; }
+  }
   if (mode === 'menu') {
     const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
     // atalho secreto: dois toques no canto superior esquerdo abrem a cena final com o Belchior
@@ -3152,6 +3207,13 @@ addEventListener('keydown', e => {
   if (KEYS.includes(k)) e.preventDefault();
   if (e.repeat) return;
   audio();
+  if (paused) {
+    if (k === 'escape' || k === 'p') setPause(false);
+    else if (k === 'r') pauseAction('restart');
+    else if (k === 'm') pauseAction('menu');
+    return;
+  }
+  if (canPause() && (k === 'p' || (k === 'escape' && mode !== 'btut'))) { setPause(true); return; }
   if (mode === 'menu') {
     if (k === 'arrowleft' || k === 'a') menuTap(0, 100);
     else if (k === 'arrowright' || k === 'd') menuTap(W, 100);
@@ -3173,7 +3235,10 @@ addEventListener('keydown', e => {
 let lastTs = 0;
 function loop(ts) {
   const dt = Math.min(.05, (ts - lastTs) / 1000 || 0); lastTs = ts;
-  update(dt); draw();
+  if (paused && !canPause()) paused = false;
+  if (!paused) update(dt);
+  draw();
+  if (canPause()) { drawPauseBtn(); if (paused) drawPause(); }
   requestAnimationFrame(loop);
 }
 const go = () => requestAnimationFrame(loop);
