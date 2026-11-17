@@ -1963,31 +1963,8 @@ function archB(od, label, col, lt, dk) {
   for (const fx of [xl - 1, xr + 3]) { R(fx + 1, ay - 22, 1, 9, OUT); spr([[fx + 2, ay - 22, 5, 3, '#ffd84a']]); }
   txt(label, 90, ay - 9, '#fff', 'center');
 }
-// pista de atletismo (tartan vermelho com raias brancas) onde começa a corrida, entre y0 e y1 na tela
-const RUN_OD = BGOAL + 22;
-function drawRunTrack(y0, y1) {
-  R(44, y0, 92, y1 - y0, '#c8553a');
-  // granulado do tartan, preso ao chão
-  const wp = S.d * PPM;
-  for (let k = Math.floor((wp + PY - y1) / 8); ; k++) {
-    const y = Math.round(PY - (k * 8 - wp));
-    if (y < y0) break;
-    for (let i = 0; i < 5; i++) {
-      const gx = 46 + Math.floor(hash(k, i + 500) * 88), gy = y - Math.floor(hash(k, i + 510) * 8);
-      if (gy >= y0 && gy < y1) R(gx, gy, 1, 1, hash(k, i + 520) < .5 ? '#a8432e' : '#e07050');
-    }
-  }
-  // bordas e raias
-  R(44, y0, 2, y1 - y0, '#f6f0e8'); R(134, y0, 2, y1 - y0, '#f6f0e8');
-  for (let i = 1; i < 4; i++) R(44 + i * 23, y0, 1, y1 - y0, '#f6f0e8');
-  R(44, y1 - 1, 92, 1, OUT);
-  // linha de largada da corrida embaixo do pórtico, com o número de cada raia
-  const ys = Math.round(syOf(BGOAL + 30));
-  if (ys > y0 - 12 && ys < y1 + 2) {
-    R(44, ys - 1, 92, 3, '#f6f0e8');
-    for (let i = 0; i < 4; i++) miniTxt(String(i + 1), 44 + i * 23 + 10, ys + 5, '#f6f0e8');
-  }
-}
+// trecho da rua da corrida que aparece depois da T2 (mesmo desenho da etapa de corrida, com o od 0 dela em RUN_START)
+const RUN_OD = BGOAL + 22, RUN_START = BGOAL + 30;
 const crowdZone = od => (od > -40 && od < 24) || (od > BGOAL - 70 && od < BROAD_END);
 
 function drawBikeWorld() {
@@ -2009,8 +1986,9 @@ function drawBikeWorld() {
     const yr = Math.min(ye, Math.max(TOP, Math.round(syOf(RUN_OD))));
     R(43, TOP, 94, ye - TOP, OUT);
     if (ye > yr) { R(44, yr, 92, ye - yr, '#3a5fd0'); R(45, yr, 2, ye - yr, '#5a80ea'); R(133, yr, 2, ye - yr, '#2e4fb0'); }
-    if (yr > TOP) drawRunTrack(TOP, yr);
-    barrier(37, BROAD_END, BGOAL + 70); barrier(140, BROAD_END, BGOAL + 70);
+    if (yr > TOP) drawRunRoad(TOP, yr, RUN_START);
+    barrier(37, BROAD_END, RUN_OD); barrier(140, BROAD_END, RUN_OD);
+    barrier(BRX0 - 7, RUN_OD, BGOAL + 70); barrier(BRX1 + 4, RUN_OD, BGOAL + 70);
   }
   // asfalto da largada até a T2
   const ya = Math.max(TOP, ye), yb = Math.min(BOT, Math.round(syOf(-1400)));
@@ -2092,12 +2070,12 @@ function drawBikeWorld() {
   barrier(BRX0 - 7, BGOAL - 70, BROAD_END); barrier(BRX1 + 4, BGOAL - 70, BROAD_END);
   for (let k = Math.floor((S.d + 24) / 1.3); k >= Math.floor((S.d - 9) / 1.3); k--) {
     const od = k * 1.3, cy = Math.round(syOf(od));
-    if (od >= BROAD_END + 1 && od < BGOAL + 70) {
+    if (od >= BROAD_END + 1 && od < RUN_OD) {
       for (let c = 0; c < 6; c++) {
         const base = c < 3 ? 3 + c * 11 : 147 + (c - 3) * 11;
         drawFan(base + Math.round(hash(k, c + 210) * 3) - 1, cy - 4 + Math.round(hash(k, c + 220) * 4), hash(k, c + 200));
       }
-    } else if (od < BROAD_END && crowdZone(od)) {
+    } else if ((od < BROAD_END && crowdZone(od)) || (od >= RUN_OD && od < BGOAL + 70)) {
       for (let c = 0; c < 4; c++) {
         const base = c < 2 ? 4 + c * 11 : 159 + (c - 2) * 11;
         drawFan(base + Math.round(hash(k, c + 210) * 3) - 1, cy - 4 + Math.round(hash(k, c + 220) * 4), hash(k, c + 200));
@@ -2629,6 +2607,51 @@ function drawRunObs(o) {
   }
 }
 const R_CROWD = od => (od > -40 && od < 30) || (od > RGOAL - 80 && od < RGOAL + 50);
+// rua da corrida entre ya e yb na tela: calçadas, asfalto, faixas, km pintado e linhas quadriculadas.
+// o = od do começo da corrida no referencial atual (0 na etapa de corrida, RUN_START no fim do ciclismo)
+function drawRunRoad(ya, yb, o) {
+  if (yb <= ya) return;
+  const wp = (S.d - o) * PPM;
+  // calçadas de concreto com juntas
+  for (const sx of [BRX0 - 12, BRX1 + 1]) {
+    R(sx, ya, 11, yb - ya, '#d8d0c4');
+    R(sx < 90 ? sx : sx + 10, ya, 1, yb - ya, '#bdb4a6');
+    for (let k = Math.floor((wp + PY - yb) / 10); ; k++) {
+      const y = Math.round(PY - (k * 10 - wp));
+      if (y < ya) break;
+      if (y < yb) R(sx, y, 11, 1, '#bdb4a6');
+    }
+  }
+  // asfalto
+  R(BRX0 - 1, ya, BRX1 - BRX0 + 2, yb - ya, OUT);
+  R(BRX0, ya, BRX1 - BRX0, yb - ya, '#5a586a');
+  for (let k = Math.floor((wp + PY - yb) / 16) - 1; ; k++) {
+    const y = Math.round(PY - (k * 16 - wp));
+    if (y < ya - 16) break;
+    for (let i = 0; i < 3; i++) {
+      const ax = BRX0 + 6 + Math.floor(hash(k, i + 80) * (BRX1 - BRX0 - 12)), ay = y - Math.floor(hash(k, i + 81) * 16);
+      if (ay >= ya && ay < yb) R(ax, ay, hash(k, i + 83) < .3 ? 2 : 1, 1, hash(k, i + 82) < .5 ? '#68657a' : '#4c4a5e');
+    }
+    const t = Math.max(ya, y - 8), b = Math.min(yb, y);
+    if (b > t) R(89, t, 2, b - t, '#f6f0e8'); // tracejado branco no meio
+  }
+  R(BRX0 + 3, ya, 2, yb - ya, '#f6f0e8'); R(BRX1 - 5, ya, 2, yb - ya, '#f6f0e8');
+  R(BRX0 + 10, ya, 2, yb - ya, '#4a8ae8'); // linha azul do percurso
+  // km pintado no asfalto de 5 em 5
+  for (let n = 1; n <= 4; n++) {
+    const y = Math.round(syOf(o + n * 5 / RKM));
+    if (y < TOP - 20 || y > BOT + 8) continue;
+    for (let x = BRX0 + 14; x < BRX1 - 8; x += 6) R(x, y, 3, 2, '#f6f0e8');
+    const label = n * 5 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
+    R(lx - 3, y - 16, w + 6, 14, '#5a586a');
+    miniTxt(label, lx, y - 13, '#f6f0e8', 2);
+  }
+  // linhas quadriculadas de largada e chegada
+  for (const od of [o, o + RGOAL]) {
+    const y = Math.round(syOf(od));
+    if (y > TOP - 8 && y < BOT + 8) for (let i = 0; i < (BRX1 - BRX0) / 4; i++) for (let j = 0; j < 2; j++) R(BRX0 + i * 4, y - 8 + j * 4, 4, 4, (i + j) % 2 ? '#fff' : '#2a2140');
+  }
+}
 function drawRunWorld() {
   const wp = S.d * PPM;
   R(0, TOP, W, BOT - TOP, '#6fbf4a');
@@ -2641,48 +2664,7 @@ function drawRunWorld() {
       R(gx, gy, 1, 2, '#4f9a36'); R(gx + 2, gy + 1, 1, 1, '#4f9a36');
     }
   }
-  const ya = Math.max(TOP, Math.round(syOf(RGOAL + 60))), yb = Math.min(BOT, Math.round(syOf(-1000)));
-  if (yb > ya) {
-    // calçadas de concreto com juntas
-    for (const sx of [BRX0 - 12, BRX1 + 1]) {
-      R(sx, ya, 11, yb - ya, '#d8d0c4');
-      R(sx < 90 ? sx : sx + 10, ya, 1, yb - ya, '#bdb4a6');
-      for (let k = Math.floor((wp + PY - yb) / 10); ; k++) {
-        const y = Math.round(PY - (k * 10 - wp));
-        if (y < ya) break;
-        if (y < yb) R(sx, y, 11, 1, '#bdb4a6');
-      }
-    }
-    // asfalto
-    R(BRX0 - 1, ya, BRX1 - BRX0 + 2, yb - ya, OUT);
-    R(BRX0, ya, BRX1 - BRX0, yb - ya, '#5a586a');
-    for (let k = Math.floor((wp + PY - yb) / 16) - 1; ; k++) {
-      const y = Math.round(PY - (k * 16 - wp));
-      if (y < ya - 16) break;
-      for (let i = 0; i < 3; i++) {
-        const ax = BRX0 + 6 + Math.floor(hash(k, i + 80) * (BRX1 - BRX0 - 12)), ay = y - Math.floor(hash(k, i + 81) * 16);
-        if (ay >= ya && ay < yb) R(ax, ay, hash(k, i + 83) < .3 ? 2 : 1, 1, hash(k, i + 82) < .5 ? '#68657a' : '#4c4a5e');
-      }
-      const t = Math.max(ya, y - 8), b = Math.min(yb, y);
-      if (b > t) R(89, t, 2, b - t, '#f6f0e8'); // tracejado branco no meio
-    }
-    R(BRX0 + 3, ya, 2, yb - ya, '#f6f0e8'); R(BRX1 - 5, ya, 2, yb - ya, '#f6f0e8');
-    R(BRX0 + 10, ya, 2, yb - ya, '#4a8ae8'); // linha azul do percurso
-    // km pintado no asfalto de 5 em 5
-    for (let n = 1; n <= 4; n++) {
-      const y = Math.round(syOf(n * 5 / RKM));
-      if (y < TOP - 20 || y > BOT + 8) continue;
-      for (let x = BRX0 + 14; x < BRX1 - 8; x += 6) R(x, y, 3, 2, '#f6f0e8');
-      const label = n * 5 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
-      R(lx - 3, y - 16, w + 6, 14, '#5a586a');
-      miniTxt(label, lx, y - 13, '#f6f0e8', 2);
-    }
-    // linhas quadriculadas de largada e chegada
-    for (const od of [0, RGOAL]) {
-      const y = Math.round(syOf(od));
-      if (y > TOP - 8 && y < BOT + 8) for (let i = 0; i < (BRX1 - BRX0) / 4; i++) for (let j = 0; j < 2; j++) R(BRX0 + i * 4, y - 8 + j * 4, 4, 4, (i + j) % 2 ? '#fff' : '#2a2140');
-    }
-  }
+  drawRunRoad(Math.max(TOP, Math.round(syOf(RGOAL + 60))), Math.min(BOT, Math.round(syOf(-1000))), 0);
   // decoração nas laterais em blocos de 8m
   for (let k = Math.floor((S.d + 26) / 8); k >= Math.floor((S.d - 10) / 8); k--) {
     const od = k * 8;
@@ -3094,8 +3076,9 @@ function drawFim() {
 const PAUSE_MODES = ['entry', 'play', 'btut', 'bentry', 'bike', 'rentry', 'run'];
 const PB = { x: W - 18, y: TOP + 3, s: 15 };
 const PAUSE_BTNS = [
-  { k: 'restart', t: 'RESTART', x: 34, w: 112, y: 140, h: 22, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a' },
-  { k: 'menu', t: 'MENU', x: 34, w: 112, y: 172, h: 22, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98' },
+  { k: 'resume', t: 'CONTINUAR', x: 34, w: 112, y: 126, h: 22, col: '#f0b020', lt: '#ffe23a', md: '#d08a18', dk: '#9a5a10' },
+  { k: 'restart', t: 'RESTART', x: 34, w: 112, y: 158, h: 22, col: '#3cc45a', lt: '#8cf09a', md: '#2a9e48', dk: '#1f7a3a' },
+  { k: 'menu', t: 'MENU', x: 34, w: 112, y: 190, h: 22, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98' },
 ];
 let paused = false;
 const canPause = () => PAUSE_MODES.includes(mode);
@@ -3114,8 +3097,8 @@ function drawPauseBtn() {
 }
 function drawPause() {
   overlay(.72);
-  panel(98, 110);
-  txt('PAUSA', W / 2, 114, '#ffe23a', 'center');
+  panel(86, 140);
+  txt('PAUSA', W / 2, 102, '#ffe23a', 'center');
   for (const b of PAUSE_BTNS) {
     const fy = drawBtn(b, false, false);
     txt(b.t, W / 2, fy + 7, '#fff', 'center');
@@ -3126,6 +3109,7 @@ function pauseTap(x, y) {
   if (b) pauseAction(b.k);
 }
 function pauseAction(k) {
+  if (k === 'resume') { setPause(false); return; } // continua de onde parou
   const stage = isBike() ? 1 : isRun() ? 2 : 0;
   paused = false; releaseAll(); tone(660, .08);
   if (k === 'restart') {
@@ -3208,7 +3192,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   audio();
   if (paused) {
-    if (k === 'escape' || k === 'p') setPause(false);
+    if (k === 'escape' || k === 'p' || k === 'c' || k === 'enter' || k === ' ') setPause(false);
     else if (k === 'r') pauseAction('restart');
     else if (k === 'm') pauseAction('menu');
     return;
