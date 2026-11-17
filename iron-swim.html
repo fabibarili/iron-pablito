@@ -2558,6 +2558,7 @@ function finishRun() {
   msg('CHEGOU!!!', '#ffe23a');
   [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .25, 'square', .06, 0, i * .14));
 }
+const RUN_CELEB = 2.4; // segundos comemorando parado antes de sair caminhando
 function updateRunEnd(dt) {
   S.endT += dt;
   if (Math.random() < dt * 6) noise(rand(.12, .25), rand(.02, .05), rand(2200, 3400));
@@ -2566,7 +2567,17 @@ function updateRunEnd(dt) {
     S.pd = Math.min(RUN_END, S.pd + S.v * dt); S.ph += dt * (2 + S.v * .9);
     S.x += (90 - S.x) * Math.min(1, dt * 2);
     if (S.pd >= RUN_END) { S.done = 1; say('SOU UM IRONMAN!'); [784, 988, 1175, 1568].forEach((f, i) => tone(f, .14, 'square', .05, 0, i * .1)); }
-  } else { S.v = 0; S.ph += dt * 6; }
+  } else {
+    // comemora um pouco parado e depois sai caminhando pela rua; a tela escurece e vem o show do Belchior
+    S.v = 0; S.doneT = (S.doneT || 0) + dt;
+    if (S.doneT < RUN_CELEB) S.ph += dt * 6;
+    else {
+      S.walk = 1; S.pd += 3.5 * dt; S.ph += dt * 7;
+      if (Math.floor(S.ph / Math.PI) !== S.stepN) { S.stepN = Math.floor(S.ph / Math.PI); noise(.04, .02, 900); }
+      S.fadeOut = Math.max(0, Math.min(1, (S.doneT - RUN_CELEB - 2.2) / 1));
+      if (S.fadeOut >= 1) { openFim(); return; }
+    }
+  }
   S.d += (Math.min(S.pd, RGOAL + 8) - S.d) * Math.min(1, dt * 3);
   if (S.endT < 5 && Math.random() < dt * 40) P.push({ x: rand(0, W), y: TOP - 2, vx: rand(-12, 12), vy: rand(14, 34), life: rand(1.5, 3), c: pick(CONF), bub: 1 });
 }
@@ -2821,21 +2832,6 @@ function drawRunTut() {
   if (!tu.done && !tu.ok) for (const b of RBTNS) hintArrow(Math.round(b.x + b.w / 2));
   if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
 }
-function drawRunResults() {
-  const k = Math.min(1, (S.endT - 2.5) * 3);
-  overlay(.75 * k);
-  if (k < 1) return;
-  panel(44, 176);
-  bigTxt('70.3', W / 2, 54, '#ff7a1a', 16, '#ffb35a');
-  txt('PABLO E IRONMAN!', W / 2, 78, '#fff', 'center');
-  const rows = [['NATACAO', lastTimes[0]], ['CICLISMO', lastTimes[1]], ['CORRIDA', lastTimes[2]]];
-  rows.forEach(([l, t], i) => { txt(l, 18, 100 + i * 16, '#c0bcf0'); txt(t == null ? '--' : fmt(t), 162, 100 + i * 16, '#fff', 'right'); });
-  R(18, 148, 144, 1, '#6b5a9a');
-  const all = lastTimes.every(t => t != null);
-  txt('TOTAL', 18, 156, '#ffe23a'); txt(all ? fmt(lastTimes[0] + lastTimes[1] + lastTimes[2]) : '--', 162, 156, '#ffe23a', 'right');
-  txt('BATIDAS ' + S.hits, W / 2, 176, '#ff9a6a', 'center');
-  if (S.endT > 3.5 && Math.floor(T * 2.5) % 2) txt('TOQUE: CONTINUAR', W / 2, 200, '#8ae3de', 'center');
-}
 function drawRunScene() {
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
@@ -2848,7 +2844,7 @@ function drawRunScene() {
   for (const o of S.obs) list.push([o.od, () => drawRunObs(o)]);
   list.push([pod, () => {
     if (S.inv > 0 && Math.floor(T * 14) % 2) return;
-    const moving = mode === 'run' || mode === 'rtut' ? S.v > .5 : mode === 'rwin' && !S.done;
+    const moving = mode === 'run' || mode === 'rtut' ? S.v > .5 : mode === 'rwin' && (!S.done || S.walk);
     drawRunner(S.x, py + 8, '#2a1c18', S.ph, moving ? 1 : 0, 0, '#40424e', 'run');
   }]);
   list.sort((a, b) => b[0] - a[0]).forEach(e => e[1]());
@@ -2872,7 +2868,7 @@ function drawRunScene() {
     if (bestRun) txt('RECORDE ' + fmt(bestRun), W / 2, 118, '#9f9', 'center');
   }
   if (S.fade > 0) overlay(S.fade);
-  if (mode === 'rwin' && S.endT > 2.5) drawRunResults();
+  if (mode === 'rwin' && S.fadeOut > 0) overlay(S.fadeOut);
 }
 
 /* ---------- fim da prova: show do Belchior ---------- */
@@ -3120,7 +3116,7 @@ function drawFim() {
 }
 
 /* ---------- input ---------- */
-function canRestart() { return (mode === 'win' && S.endT > 1) || (mode === 'bwin' && S.endT > 2) || (mode === 'rwin' && S.endT > 3.5) || (mode === 'fim' && S.endT > FIM_DONE); }
+function canRestart() { return (mode === 'win' && S.endT > 1) || (mode === 'bwin' && S.endT > 2) || (mode === 'rwin' && S.done) || (mode === 'fim' && S.endT > FIM_DONE); }
 // fim da etapa -> volta ao menu já na próxima etapa (n = índice da etapa seguinte)
 function advance(n = mode === 'bwin' ? 2 : mode === 'fim' ? 0 : 1) {
   // depois do quadro final da corrida vem o show do Belchior
