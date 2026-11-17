@@ -2282,7 +2282,7 @@ const RGOAL = 1600, RKM = 21.1 / RGOAL, RUN_END = RGOAL + 14;
 const RUN_MODES = ['rtut', 'rentry', 'run', 'rwin'];
 const isRun = () => RUN_MODES.includes(mode);
 // segurar o botão de correr acelera até RVMAX; soltar vai freando. Correr gasta energia, parado recupera
-const RVMAX = 17, WINE_T = 4;
+const RVMAX = 17, WINE_T = 5;
 // setas juntas na esquerda, botão de correr no canto direito (mesmo layout do ciclismo)
 const RBTNS = [
   { k: 'L', x: 4, w: 60, col: '#3fc0d0', lt: '#94ecea', md: '#2fa0bc', dk: '#246e98', plate: '#2a8cb0' },
@@ -2300,7 +2300,7 @@ function newRunStage() {
   return {
     d: -2.5, v: 0, x: 90, vx: 0, t: 0, en: 1, hy: 1, obs: [], items: [], held: 0, wine: 0, pt: 0,
     nextObs: 20, nextRunner: 26, nextPed: 75, nextWater: 55, nextGel: 100, nextWine: 160, ck: 1, half: 0,
-    hits: 0, inv: 0, flash: 0, shake: 0, warnE: 0, warnH: 3, outE: 0, outH: 0, endT: 0, bub: null,
+    hits: 0, inv: 0, flash: 0, shake: 0, warnE: 0, warnH: 3, hic: 0, hicT: 0, lurch: 0, outE: 0, outH: 0, endT: 0, bub: null,
     ph: 0, step: 0, lastT: -1, fade: 1, pd: 0, fadeOut: 0, kick: 0, aL: 0, aR: 0, tL: 0, tR: 0, breath: 0, done: 0,
   };
 }
@@ -2340,7 +2340,7 @@ function updateRunTut(dt) {
 // velocidade máxima: sem energia ou sem água o Pablo só anda; com pouco, corre bem menos; vinho deixa lento
 function runVmax() {
   let v = S.en <= 0 || S.hy <= 0 ? 4 : S.en < .2 || S.hy < .2 ? 11 : RVMAX;
-  if (S.wine > 0) v *= .55;
+  if (S.wine > 0) v *= .75;
   return v;
 }
 
@@ -2407,11 +2407,19 @@ function runStep(dt) {
   if (hold.P) { S.held += dt; if (S.v < vm) S.v = Math.min(vm, S.v + 9 * dt); }
   else S.v = Math.max(0, S.v - (S.v * .6 + 2) * dt);
   if (S.v > vm) S.v = Math.max(vm, S.v - 10 * dt);
-  // de pileque: cambaleia de um lado para o outro
-  if (S.wine > 0) S.vx += Math.sin(T * 5) * 120 * dt;
   // direção: segura a seta para ir de lado
   const st = (hold.R ? 1 : 0) - (hold.L ? 1 : 0);
-  S.vx += (st * 80 - S.vx) * Math.min(1, dt * 10);
+  // de pileque: as setas respondem atrasado, ele cambaleia sozinho e de vez em quando dá um tropeção pro lado
+  const dk = Math.min(1, S.wine);
+  S.hicT = Math.max(0, S.hicT - dt);
+  if (dk > 0) {
+    S.vx += (st * 80 - S.vx) * Math.min(1, dt * 2.2);
+    S.vx += (Math.sin(T * 2.3) + Math.sin(T * 3.7 + 1) * .6) * 150 * dk * dt;
+    S.lurch -= dt;
+    if (S.lurch <= 0) { S.lurch = rand(.7, 1.4); S.vx += (Math.random() < .5 ? -1 : 1) * rand(45, 75) * dk; }
+    S.hic -= dt;
+    if (S.hic <= 0) { S.hic = rand(1.1, 1.8); S.hicT = .6; tone(rand(500, 640), .07, 'square', .04, 300); }
+  } else S.vx += (st * 80 - S.vx) * Math.min(1, dt * 10);
   S.x += S.vx * dt;
   if (S.x < BMINX || S.x > BMAXX) { S.x = Math.min(BMAXX, Math.max(BMINX, S.x)); S.vx = 0; }
   S.d += S.v * dt;
@@ -2527,8 +2535,8 @@ function updateRun(dt) {
       say(pick(GEL_PH), '#d8762a'); splash(S.x, PY - 8, 12, '#ffb35a');
       [659, 880, 1175, 1568].forEach((f, i) => tone(f, .08, 'square', .05, 0, i * .05));
     } else if (it.k === 'v') {
-      S.wine = WINE_T; S.v *= .6;
-      say('VINHO É DEPOIS!', '#8a2a4a');
+      S.wine = WINE_T; S.v *= .6; S.hic = 1; S.lurch = .3;
+      say(pick(['VINHO É DEPOIS!', 'TÔ VENDO DOIS CONES...', 'O CHÃO TÁ MEXENDO!']), '#8a2a4a');
       for (let i = 0; i < 10; i++) P.push({ x: S.x + rand(-4, 4), y: PY - 14, vx: rand(-20, 20), vy: rand(-30, -10), life: rand(.4, .8), c: i % 2 ? '#c03a6a' : '#e8a0c0', bub: 1 });
       [392, 330, 262, 196].forEach((f, i) => tone(f, .14, 'triangle', .06, 0, i * .1));
     }
@@ -2611,6 +2619,18 @@ function drawBanana(x, y, h = 0) {
 function drawItem(it) {
   const x = Math.round(it.x), y = Math.round(syOf(it.od)) + 4, b = Math.sin(T * 5 + it.od) > 0 ? -1 : 0;
   if (y < TOP - 14 || y > BOT + 10) return;
+  if (it.k !== 'v') {
+    // destaque: coluna de luz, anel pulsando no chão e brilho em volta (azul = água, laranja = gel)
+    const hc = it.k === 'w' ? '79,184,240' : '255,154,58', pu = (Math.sin(T * 6 + it.od) + 1) / 2;
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = 'rgba(' + hc + ',' + ((.3 + pu * .12) * (1 - i / 6)) + ')'; ctx.fillRect(x - 3, y - 4 - i * 5, 7, 5); }
+    const rr = 6 + Math.round(pu * 4);
+    ctx.fillStyle = 'rgba(' + hc + ',' + (1 - pu * .6) + ')';
+    for (let a = 0; a < 20; a++) { const an = a / 20 * Math.PI * 2; ctx.fillRect(Math.round(x + Math.cos(an) * rr), Math.round(y + 3 + Math.sin(an) * rr * .45), 2, 1); }
+    disc(x, y - 3 + b, 7, 'rgba(' + hc + ',' + (.35 + pu * .25) + ')');
+    disc(x, y - 3 + b, 5, 'rgba(255,255,255,' + (.3 + pu * .2) + ')');
+    // brilhinhos girando em volta
+    for (let i = 0; i < 3; i++) { const an = T * 3 + i * 2.1 + it.od; R(x + Math.cos(an) * 9, y - 4 + b + Math.sin(an) * 4, 1, 1, i ? 'rgb(' + hc + ')' : '#fff'); }
+  }
   R(x - 3, y + 2, 7, 2, 'rgba(20,14,30,.3)');
   if (it.k === 'w') {
     spr([[x - 2, y - 6 + b, 5, 7, '#f6f0e8']]);
@@ -2836,6 +2856,8 @@ function drawRunScene() {
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
   if (S.shake > 0) ctx.translate(Math.round(rand(-2, 2)), Math.round(rand(-1, 1)));
+  // de pileque a tela balança um pouquinho
+  if (S.wine > 0) ctx.translate(Math.round(Math.sin(T * 1.8) * 2 * Math.min(1, S.wine)), 0);
   drawRunWorld();
   // tudo em ordem de profundidade: quem está mais à frente é desenhado antes
   const pod = mode === 'rwin' ? S.pd : S.d, py = mode === 'rwin' ? syOf(S.pd) : PY;
@@ -2845,7 +2867,13 @@ function drawRunScene() {
   list.push([pod, () => {
     if (S.inv > 0 && Math.floor(T * 14) % 2) return;
     const moving = mode === 'run' || mode === 'rtut' ? S.v > .5 : mode === 'rwin' && (!S.done || S.walk);
-    drawRunner(S.x, py + 8, '#2a1c18', S.ph, moving ? 1 : 0, 0, '#40424e', 'run');
+    const dk = Math.min(1, S.wine), wx = dk ? Math.round(Math.sin(T * 7) * 2 * dk) : 0;
+    drawRunner(S.x + wx, py + 8, '#2a1c18', S.ph, moving ? 1 : 0, 0, '#40424e', 'run');
+    if (dk) {
+      // estrelinhas rodando na cabeça
+      for (let i = 0; i < 3; i++) { const an = T * 4 + i * 2.1; R(S.x + wx + Math.cos(an) * 6, py - 20 + Math.sin(an) * 2, 1, 1, i % 2 ? '#ffe23a' : '#ff8ad8'); }
+      if (S.hicT > 0) txt('HIC!', S.x + 8, py - 26 - Math.round((.6 - S.hicT) * 10), '#ff8ad8', 'left');
+    }
   }]);
   list.sort((a, b) => b[0] - a[0]).forEach(e => e[1]());
   for (const p of P) R(p.x, p.y, p.bub && mode === 'rwin' ? 2 : 1, p.bub && mode === 'rwin' ? 2 : 1, p.c);
@@ -2854,6 +2882,7 @@ function drawRunScene() {
   archB(RGOAL, 'CHEGADA', '#e0403a', '#ff8a6a', '#a82a30');
   drawBubble(S.x, py);
   if (S.flash > 0) { ctx.fillStyle = 'rgba(255,40,40,' + S.flash + ')'; ctx.fillRect(0, TOP, W, BOT - TOP); }
+  if (S.wine > 0) { ctx.fillStyle = 'rgba(190,60,120,' + (.1 + Math.sin(T * 3) * .04) * Math.min(1, S.wine) + ')'; ctx.fillRect(-4, TOP, W + 8, BOT - TOP); }
   drawMsgs();
   hudShadow();
   ctx.restore();
