@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Iron 70.3</title>
+<title>Ironman 140.6</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;height:100%;position:fixed;inset:0;overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-touch-callout:none;background:#1d1830;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -17,8 +17,8 @@
 <script>
 (() => {
 const W = 180, H = 320, TOP = 24, BOT = 258, PY = 206, PPM = 8;
-// natação: a prova mostra 1900m, mas o percurso na tela é 30% mais curto (1m mostrado = SC m do mundo)
-const SWIM_M = 1900, SC = .7, GOAL = Math.round(SWIM_M * SC), BIG_BUOY = Math.round(100 * SC);
+// natação: SWIM_M/SC definem o percurso na tela (1m de SWIM_M = SC m do mundo); o HUD mostra SWIM_SHOW (3,8km)
+const SWIM_M = 1900, SC = .7, SWIM_SHOW = 3800, SWX = SWIM_SHOW / SWIM_M, GOAL = Math.round(SWIM_M * SC), BIG_BUOY = Math.round(100 * SC);
 const MINX = 22, MAXX = 158;
 const cv = document.getElementById('c');
 let ctx = cv.getContext('2d');
@@ -366,7 +366,7 @@ function update(dt) {
     if (S.d / SC >= S.ck && S.ck < SWIM_M) {
       const n = S.ck; S.ck += 100;
       if (n === 1000) msg('PASSOU DA METADE!', '#ffe23a');
-      else if (n === 1800) msg('ULTIMOS 100m!', '#ffe23a');
+      else if (n === 1800) msg('ULTIMOS 200m!', '#ffe23a');
       // não atropela o balão de uma batida que acabou de acontecer
       if (!S.bub || S.bub.age > .9) say(pick(PHRASES.filter(f => f !== S.lastPhrase)));
       S.lastPhrase = S.bub.t.join('|');
@@ -916,7 +916,7 @@ function drawMarkers(floor) {
   for (let m = a; m <= b; m += 100) {
     const sy = Math.round(syOf(m * SC));
     if (sy < TOP - 20 || sy > BOT + 20) continue;
-    const label = m + 'M';
+    const label = m * SWX + 'M';
     if (floor) {
       // faixa tracejada no fundo, de boia a boia
       for (let x = MINX - 2; x < MAXX + 2; x += 8) R(x, sy - 1, 5, 2, 'rgba(30,70,120,.22)');
@@ -1003,7 +1003,7 @@ function drawHUD() {
     // distância (ícone de boia)
     chip(2, 2, 58, 12);
     disc(8, 8, 3, OUT); disc(8, 8, 2, '#ff7a2a'); R(7, 7, 1, 1, '#ffd0a0'); R(6, 9, 5, 1, '#f6f0e8');
-    txt(Math.min(SWIM_M, Math.floor(d / SC + 1e-6)) + 'm', 14, 4, '#fff');
+    txt(Math.min(SWIM_SHOW, Math.floor(d / SC * SWX + 1e-6)) + 'm', 14, 4, '#fff');
     // ritmo: 5 barrinhas que acendem com a velocidade
     const lit = mode === 'play' ? Math.ceil(S.v / 16 * 5 - .15) : 0;
     for (let i = 0; i < 5; i++) {
@@ -1017,8 +1017,8 @@ function drawHUD() {
     drawStopwatch(120, 3, mode === 'play' ? S.t : 0);
     txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
   }
-  // percurso: trilha com marcas a cada 500m, bandeira quadriculada e a touca do Pablo
-  drawTrack(p, [500, 1000, 1500].map(m => m / SWIM_M));
+  // percurso: trilha com marcas a cada 1000m, bandeira quadriculada e a touca do Pablo
+  drawTrack(p, [1000, 2000, 3000].map(m => m / SWIM_SHOW));
 }
 // trilha do percurso no HUD: marcas (ticks), pontos coloridos [fração, cor] e a bandeira de chegada
 function drawTrack(p, ticks, dots = []) {
@@ -1387,7 +1387,7 @@ function drawBikePablo(ox, oy, s, a) {
   g(29, 6, 3, 1, PC.s); g(29, 7, 2, 1, PC.S);
 }
 
-const STAGES = [['NATACAO', '1,9KM', 1], ['CICLISMO', '90KM', 1], ['CORRIDA', '21,1KM', 1]];
+const STAGES = [['NATACAO', '3,8KM', 1], ['CICLISMO', '180KM', 1], ['CORRIDA', '42KM', 1]];
 let msel = 0;
 // animação de etapa liberada no menu: qual pílula e quanto tempo falta
 const UNLOCK_T = 3;
@@ -1435,7 +1435,7 @@ function drawMenu() {
   // título com brilho na metade de cima
   // prova completa: o título vira o selo do Pablo Ironman
   if (ironCount > 0) ironBadge(12);
-  else { bigTxt('IRON 70.3', W / 2, 14, '#ff7a1a', 16, '#ffb35a'); txt('AJUDE O PABLO!', W / 2, 38, '#fff', 'center'); }
+  else { bigTxt('IRONMAN 140.6', W / 2, 16, '#ff7a1a', 12, '#ffb35a'); txt('AJUDE O PABLO!', W / 2, 38, '#fff', 'center'); }
 
   const GY = 230, s = 3;
   // Pablo da etapa selecionada (células de 3px, sem contorno)
@@ -1505,10 +1505,10 @@ function trophyIcon(x, y, s = 1) {
   r(2, 8, 5, 1, G); r(1, 9, 7, 1, g);
   r(2, 1, 1, 3, L); r(6, 1, 1, 4, g);
 }
-// título de quem completou a prova: "PABLO IRONMAN 70.3" todo em dourado numa linha só,
+// título de quem completou a prova: "PABLO IRONMAN 140.6" todo em dourado numa linha só,
 // e embaixo o número de vezes com o troféu, os dois apoiados na mesma linha de base
 function ironBadge(y) {
-  bigTxt('PABLO IRONMAN 70.3', W / 2, y + 6, '#ffd23a', 9, '#fff6b0');
+  bigTxt('PABLO IRONMAN 140.6', W / 2, y + 6, '#ffd23a', 9, '#fff6b0');
   // brilhinhos piscando em volta do título
   for (let i = 0; i < 4; i++) if (Math.floor(T * 3 + i * 1.7) % 4 === 0) {
     const sx = [10, 170, 16, 164][i], sy = y + [0, 2, 22, 21][i];
@@ -1603,9 +1603,9 @@ function drawMsgs() {
 }
 
 /* ---------- ciclismo ---------- */
-// pista de 2700m na tela = 90km na prova (1m do jogo = 1/30 km). Asfalto de BRX0 a BRX1
-const BGOAL = 2100, BKM = 90 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
-const BVMAX = 24, WATER_EVERY = 280, KM10 = BGOAL / 9, BROAD_END = BGOAL + 8, DIS_OD = BGOAL + 13, RACK_X = 74, RUN_X = 94;
+// pista de 2100m na tela = 180km na prova. Asfalto de BRX0 a BRX1
+const BGOAL = 2100, BKM = 180 / BGOAL, BRX0 = 34, BRX1 = 146, BMINX = BRX0 + 8, BMAXX = BRX1 - 8;
+const BVMAX = 24, KM10 = BGOAL / 9, BROAD_END = BGOAL + 8, DIS_OD = BGOAL + 13, RACK_X = 74, RUN_X = 94;
 const BIKE_MODES = ['btut', 'bentry', 'bike', 'bwin'];
 // dificuldade: 0.8 = 20% mais fácil (obstáculos mais espaçados, fôlego dura mais, cachorros mais lentos)
 const BDIFF = .8;
@@ -1619,12 +1619,13 @@ const BBTNS = [
 ];
 const BPHR = ['PERNAS DE AÇO!', 'VOANDO BAIXO!', 'SOU UM FOGUETE!', 'NEM SUEI!', 'PEDAL DE OURO!'];
 const WATER_PH = ['ÁGUA GELADA!', 'HIDRATADO!', 'AHHH, QUE DELÍCIA!', 'FÔLEGO NOVO!'];
+const GEL_PH = ['GEL DE MORANGO!', 'ENERGIA!', 'GEL NA VEIA!', 'TURBINADO!'];
 let bestBike = null;
 
 function newBike() {
   return {
-    d: -2, v: 0, held: 0, pt: 0, x: 90, vx: 0, t: 0, fol: 1, obs: [], water: [], nextHole: 60, nextDog: 150, nextRider: 70, ck: 1, half: 0,
-    hits: 0, inv: 0, flash: 0, shake: 0, warnT: 0, empty: 0, endT: 0, bub: null, ph: 0, lastT: -1, fade: 1,
+    d: -2, v: 0, held: 0, pt: 0, x: 90, vx: 0, t: 0, en: 1, hy: 1, obs: [], items: [], nextHole: 60, nextDog: 150, nextRider: 70, ck: 1, half: 0,
+    nextWater: 70, nextGel: 140, hits: 0, inv: 0, flash: 0, shake: 0, warnE: 0, warnH: 3, outE: 0, outH: 0, endT: 0, bub: null, ph: 0, lastT: -1, fade: 1,
     pd: 0, bv: 0, st: '', k: 0, rx: RACK_X, fadeOut: 0, kick: 0, aL: 0, aR: 0, tL: 0, tR: 0, breath: 0,
   };
 }
@@ -1640,7 +1641,6 @@ function openBike() {
 }
 function startBike() {
   S = newBike(); P = []; M = []; hold.L = hold.R = hold.P = 0;
-  for (let s = 260, i = 0; s < BGOAL - 120; s += WATER_EVERY, i++) S.water.push({ od: s, side: i % 2 ? 1 : -1, got: 0, miss: 0, warned: 0 });
   for (const [x, od] of [[60, 1.5], [118, 2.5], [76, 5], [104, 7]]) S.obs.push(newRider(od, x));
   mode = 'bentry'; cd = 3; tone(440, .12);
 }
@@ -1649,11 +1649,11 @@ function tutNext() {
   const tu = S.tut;
   tu.step++; tu.ok = 0; tu.wrong = 0;
   [659, 784, 1046].forEach((f, i) => tone(f, .12, 'square', .05, 0, i * .08));
-  if (tu.step === 1) { S.fol = .3; tutWater(); say('PRECISO DE ÁGUA!', '#2b6cb0'); }
+  if (tu.step === 1) { S.hy = .3; tutWater(); say('PRECISO DE ÁGUA!', '#2b6cb0'); }
   else { tu.done = .001; say('BORA PRA LARGADA!'); }
 }
-// posto sempre do lado oposto ao do Pablo, para ele ter que atravessar a pista
-function tutWater() { S.water = [{ od: S.d + 24, side: S.x < 90 ? 1 : -1, got: 0, miss: 0, warned: 1 }]; }
+// copo d'água sempre do lado oposto ao do Pablo, para ele ter que atravessar a pista
+function tutWater() { S.items = [{ k: 'w', od: S.d + 24, x: S.x < 90 ? BMAXX - 10 : BMINX + 10, got: 0 }]; }
 function updateBikeTut(dt) {
   const tu = S.tut;
   tu.wrong = Math.max(0, tu.wrong - dt);
@@ -1665,22 +1665,22 @@ function updateBikeTut(dt) {
   if (tu.done) { tu.done += dt; if (tu.done > 1.4) startBike(); return; }
   if (tu.ok) { tu.ok += dt; if (tu.ok > .7) tutNext(); return; }
   if (tu.step === 1) {
-    const w = S.water[0], near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30;
-    if (Math.abs(w.od - S.d) < 1.6 && near) {
-      w.got = 1; S.fol = 1; tu.ok = .001;
-      say('ÁGUA GELADA!', '#2b6cb0'); splash(S.x + w.side * 4, PY - 8, 12, '#8ae3de');
+    const w = S.items[0];
+    if (Math.abs(w.od - S.d) * PPM < 8 && Math.abs(w.x - S.x) < 9) {
+      w.got = 1; S.hy = 1; tu.ok = .001;
+      say('ÁGUA GELADA!', '#2b6cb0'); splash(S.x, PY - 8, 12, '#8ae3de');
       [784, 988, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .06));
-    } else if (S.d > w.od + 1.6) { tu.wrong = 1.2; tone(220, .2, 'square', .05, -60); tutWater(); }
+    } else if (S.d > w.od + 1.2) { tu.wrong = 1.2; tone(220, .2, 'square', .05, -60); tutWater(); }
   }
 }
-const bVmax = () => 8 + (BVMAX - 8) * Math.min(1, S.fol * 3);
-// segurar o botão da bike pedala sem parar; sem fôlego a pedalada rende bem menos
+// velocidade máxima: sem energia ou sem água o Pablo pedala devagar; com pouco, rende bem menos (igual à corrida)
+const bVmax = () => S.en <= 0 || S.hy <= 0 ? 8 : S.en < .2 || S.hy < .2 ? 15 : BVMAX;
+// segurar o botão da bike pedala sem parar; cansado a pedalada rende bem menos
 function pedalHold(dt) {
   if (!hold.P || (mode !== 'bike' && mode !== 'btut')) return;
   S.held += dt;
-  const f = Math.min(1, S.fol * 2), vm = bVmax();
+  const f = Math.min(1, Math.min(S.en, S.hy) * 2), vm = bVmax();
   if (S.v < vm) S.v = Math.min(vm, S.v + 7.5 * (.3 + .7 * f) * dt);
-  S.fol = Math.max(0, S.fol - .01 * BDIFF * dt);
   // tique da pedalada, mais rápido quanto maior a velocidade
   S.pt -= dt;
   if (S.pt <= 0) { S.pt = .22 - Math.min(.12, S.v * .005); tone(180 + S.v * 10, .035, 'triangle', .05); }
@@ -1706,13 +1706,21 @@ const RIDER_PAL = [
   { f: '#f6f0e8', s: '#4a4462', j: '#4fd0dc', h: '#4fd0dc', hs: '#f6f0e8', sk: '#eab07a' },
 ];
 const newRider = (od, x = rand(BMINX + 4, BMAXX - 4)) => ({ k: 'b', od, x, sp: rand(10, 17), ph: rand(0, 6), dr: rand(0, 6), pal: pick(RIDER_PAL), hit: 0, wob: 0 });
-const nearWater = (od, r) => S.water.some(w => Math.abs(w.od - od) < r);
+// acha um x livre no asfalto (sem buraco ou item muito perto)
+function bClearX(od) {
+  for (let i = 0; i < 10; i++) {
+    const x = rand(BMINX + 4, BMAXX - 4);
+    if (!S.obs.some(o => o.k === 'h' && Math.abs(o.od - od) < 4 && Math.abs(o.x - x) < 18) &&
+        !S.items.some(it => Math.abs(it.od - od) < 4 && Math.abs(it.x - x) < 18)) return x;
+  }
+  return null;
+}
 
 function spawnBike() {
   while (S.nextHole < S.d + 40 && S.nextHole < BGOAL - 30) {
     const od = S.nextHole, p = od / BGOAL;
-    if (!nearWater(od, 9)) {
-      const x = rand(BMINX + 2, BMAXX - 2);
+    const x = bClearX(od);
+    if (x !== null) {
       S.obs.push({ k: 'h', od, x, hit: 0 });
       // mais pra frente aparecem buracos em dupla
       if (p > .35 && Math.random() < .35 * BDIFF) S.obs.push({ k: 'h', od: od + rand(-.5, .5), x: x < 90 ? x + rand(28, 40) : x - rand(28, 40), hit: 0 });
@@ -1726,11 +1734,22 @@ function spawnBike() {
   }
   while (S.nextDog < S.d + 40 && S.nextDog < BGOAL - 40) {
     const od = S.nextDog, p = od / BGOAL, side = Math.random() < .5 ? -1 : 1;
-    if (!nearWater(od, 18)) S.obs.push({
+    S.obs.push({
       k: 'c', od, side, x: side < 0 ? BRX0 - 12 : BRX1 + 12, run: 0, trig: rand(15, 21), sp: (rand(48, 66) + p * 15) * BDIFF,
       ph: rand(0, 6), hit: 0, bark: 0, col: Math.floor(Math.random() * DOG_COLS.length),
     });
     S.nextDog += (rand(75, 130) - p * 35) / BDIFF;
+  }
+  // água e gel no meio da pista (igual à corrida, mais espaçados porque a bike anda mais)
+  while (S.nextWater < S.d + 40 && S.nextWater < BGOAL - 20) {
+    const x = bClearX(S.nextWater);
+    if (x !== null) S.items.push({ k: 'w', od: S.nextWater, x, got: 0 });
+    S.nextWater += rand(125, 185);
+  }
+  while (S.nextGel < S.d + 40 && S.nextGel < BGOAL - 20) {
+    const x = bClearX(S.nextGel);
+    if (x !== null) S.items.push({ k: 'g', od: S.nextGel, x, got: 0 });
+    S.nextGel += rand(165, 245);
   }
 }
 
@@ -1760,14 +1779,20 @@ function updateBike(dt) {
   }
   if (mode === 'bwin') { updateT2(dt); return; }
   S.t += dt;
-  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnT -= dt;
+  S.inv = Math.max(0, S.inv - dt); S.shake = Math.max(0, S.shake - dt); S.warnE -= dt; S.warnH -= dt;
   rideStep(dt);
-  // fôlego: gasta com o tempo e mais rápido quando está voando
-  S.fol = Math.max(0, S.fol - dt * (1 / 65 + S.v / BVMAX / 80) * BDIFF);
-  if (S.fol < .25 && S.warnT <= 0) { say('PRECISO DE ÁGUA!', '#2b6cb0'); S.warnT = 5; }
-  if (S.fol <= 0 && !S.empty) { S.empty = 1; msg('SEM FOLEGO!', '#ff5a4a'); tone(200, .3, 'sawtooth', .06, -80); }
-  if (S.fol > 0) S.empty = 0;
-  if (S.fol < .3 && Math.random() < dt * 4) P.push({ x: S.x + rand(-3, 3), y: PY - 10, vx: rand(-14, 14), vy: rand(-26, -10), life: .4, c: '#a6e4ff' });
+  // energia gasta pedalando (mais quanto mais rápido) e volta parado; água gasta sempre (igual à corrida)
+  const sp = S.v / BVMAX;
+  S.en = Math.max(0, Math.min(1, S.en - (hold.P ? (.003 + sp * .016) * BDIFF : -.01) * dt));
+  S.hy = Math.max(0, S.hy - (1 / 95 + sp * .009) * BDIFF * dt);
+  if (S.en < .25 && S.warnE <= 0 && (!S.bub || S.bub.age > .9)) { say('PRECISO DE UM GEL!', '#d8762a'); S.warnE = 6; }
+  if (S.hy < .25 && S.warnH <= 0 && (!S.bub || S.bub.age > .9)) { say('PRECISO DE ÁGUA!', '#2b6cb0'); S.warnH = 6; }
+  if (S.en <= 0 && !S.outE) { S.outE = 1; msg('SEM ENERGIA!', '#ff5a4a'); tone(200, .3, 'sawtooth', .06, -80); }
+  if (S.en > .1) S.outE = 0;
+  if (S.hy <= 0 && !S.outH) { S.outH = 1; msg('DESIDRATADO!', '#ff5a4a'); tone(200, .3, 'sawtooth', .06, -80); }
+  if (S.hy > 0) S.outH = 0;
+  // suor quando está acabando
+  if ((S.en < .3 || S.hy < .3) && Math.random() < dt * 5) P.push({ x: S.x + rand(-3, 3), y: PY - 10, vx: rand(-14, 14), vy: rand(-26, -10), life: .4, c: '#a6e4ff' });
 
   spawnBike();
   for (const o of S.obs) {
@@ -1807,22 +1832,25 @@ function updateBike(dt) {
   }
   S.obs = S.obs.filter(o => o.od - S.d > -12 && o.od - S.d < 70 && o.x > -30 && o.x < W + 30);
 
-  // postos de hidratação: passar colado no lado do voluntário pega a garrafa
-  for (const w of S.water) {
-    if (w.got || w.miss) continue;
-    if (!w.warned && w.od - S.d < 30) { w.warned = 1; msg(w.side < 0 ? '< PEGUE AGUA' : 'PEGUE AGUA >', '#8ae3de'); tone(988, .06, 'square', .04); tone(1318, .08, 'square', .04, 0, .07); }
-    const near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30;
-    if (Math.abs(w.od - S.d) < 1.6 && near) {
-      w.got = 1; S.fol = 1; S.empty = 0;
-      say(pick(WATER_PH), '#2b6cb0');
-      splash(S.x + w.side * 4, PY - 8, 12, '#8ae3de');
+  // pegar água e gel: passar por cima
+  for (const it of S.items) {
+    if (it.got || Math.abs(it.od - S.d) * PPM > 8 || Math.abs(it.x - S.x) > 9) continue;
+    it.got = 1;
+    if (it.k === 'w') {
+      S.hy = Math.min(1, S.hy + .45);
+      say(pick(WATER_PH), '#2b6cb0'); splash(S.x, PY - 8, 12, '#8ae3de');
       [784, 988, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .06));
-    } else if (S.d > w.od + 1.6) { w.miss = 1; msg('PERDEU A AGUA!', '#ff9a3a'); tone(220, .2, 'square', .05, -60); }
+    } else {
+      S.en = Math.min(1, S.en + .4);
+      say(pick(GEL_PH), '#d8762a'); splash(S.x, PY - 8, 12, '#ffb35a');
+      [659, 880, 1175, 1568].forEach((f, i) => tone(f, .08, 'square', .05, 0, i * .05));
+    }
   }
-  // placas de 10 em 10 km
+  S.items = S.items.filter(it => !it.got && it.od - S.d > -12);
+  // placas de 20 em 20 km
   if (S.d >= S.ck * KM10 && S.ck < 9) {
-    const km = S.ck * 10; S.ck++;
-    msg(km === 50 ? 'PASSOU DA METADE!' : km + ' KM!', '#ffe23a');
+    const km = S.ck * 20; S.ck++;
+    msg(km === 100 ? 'PASSOU DA METADE!' : km + ' KM!', '#ffe23a');
     if (!S.bub || S.bub.age > .9) say(pick(BPHR));
     tone(660, .08, 'square', .05); tone(990, .14, 'square', .05, 0, .08);
   }
@@ -1914,8 +1942,6 @@ function drawHole(o) {
   R(x + 3, y + 6, 6, 1, '#6a687c'); R(x + 10, y + 5, 2, 1, '#6a687c'); // borda iluminada
   R(x - 1, y + 1, 1, 1, '#3e3c4c'); R(x - 2, y, 1, 1, '#3e3c4c'); R(x + 13, y + 4, 1, 1, '#3e3c4c'); R(x + 14, y + 5, 1, 1, '#3e3c4c'); // rachaduras
 }
-const DROP = ['..o..', '.oBo.', '.oBo.', 'oBBBo', 'oBhBo', 'oBBBo', '.ooo.'];
-const DROP_C = { o: OUT, B: '#4fb8f0', h: '#d6f8ff' };
 function tree(cx, cy) {
   disc(cx + 3, cy + 4, 8, 'rgba(20,40,10,.3)');
   disc(cx, cy, 9, OUT); disc(cx, cy, 8, '#3b6e24'); disc(cx - 1, cy - 1, 6, '#5d9e2f'); disc(cx - 3, cy - 3, 3, '#8cc545');
@@ -1924,18 +1950,6 @@ function bush(cx, cy) {
   disc(cx + 1, cy + 2, 5, 'rgba(20,40,10,.3)');
   disc(cx, cy, 5, OUT); disc(cx, cy, 4, '#4f9a36'); disc(cx - 1, cy - 1, 2, '#7cc545');
   R(cx + 1, cy - 2, 1, 1, '#ff8ad8'); R(cx - 2, cy + 1, 1, 1, '#ffe23a');
-}
-// voluntário do posto de água, de frente para a pista, com a garrafa esticada
-function drawVolunteer(x, y, sd, has) {
-  const sk = '#c98a5a';
-  R(x - 2, y + 8, 8, 2, 'rgba(20,40,10,.3)');
-  const ax = sd < 0 ? x + 4 : x - 7;
-  spr([[x, y, 4, 4, sk], [x, y + 4, 4, 5, '#ffd84a'], [ax, y + 4, 7, 2, sk]]);
-  R(x, y, 4, 1, '#1d1820'); R(x, y + 7, 4, 1, '#e8732a');
-  if (has) {
-    const bx = sd < 0 ? x + 10 : x - 9, by = y + 1 + (Math.sin(T * 8) > 0 ? 1 : 0);
-    spr([[bx, by, 3, 6, '#4fb8f0']]); R(bx, by, 3, 1, '#f6f0e8'); R(bx, by + 2, 1, 3, '#a6e4ff');
-  }
 }
 // grade vermelha e branca vertical, presa ao chão (rola com a câmera)
 function barrier(x, od0, od1) {
@@ -2007,12 +2021,12 @@ function drawBikeWorld() {
       if (b > t) R(89, t, 2, b - t, '#ffd84a');
     }
     R(BRX0 + 3, ya, 2, yb - ya, '#f6f0e8'); R(BRX1 - 5, ya, 2, yb - ya, '#f6f0e8');
-    // marcação de km pintada no asfalto a cada 5 km: faixa transversal tracejada e número grande
+    // marcação de km pintada no asfalto a cada 10 km: faixa transversal tracejada e número grande
     for (let n = 1; n < 18; n++) {
       const y = Math.round(syOf(n * KM10 / 2));
       if (y < TOP - 20 || y > BOT + 8) continue;
       for (let x = BRX0 + 8; x < BRX1 - 8; x += 6) R(x, y, 3, 2, '#f6f0e8');
-      const label = n * 5 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
+      const label = n * 10 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
       R(lx - 3, y - 16, w + 6, 14, '#545264'); // apaga o tracejado amarelo atrás do número
       miniTxt(label, lx, y - 13, n % 2 ? '#cfc6b8' : '#f6f0e8', 2);
     }
@@ -2022,34 +2036,12 @@ function drawBikeWorld() {
       if (y > TOP - 8 && y < BOT + 8) for (let i = 0; i < (BRX1 - BRX0) / 4; i++) for (let j = 0; j < 2; j++) R(BRX0 + i * 4, y - 8 + j * 4, 4, 4, (i + j) % 2 ? c1 : c2);
     }
   }
-  // zonas de hidratação pintadas no asfalto + mesa com garrafas e placa antes
-  for (const w of S.water) {
-    const y0 = Math.round(syOf(w.od + 2)), y1 = Math.round(syOf(w.od - 5));
-    if (y0 > BOT + 40 || y1 < TOP - 60) continue;
-    const lx = w.side < 0 ? BRX0 + 6 : BRX1 - 30;
-    R(lx, y0, 24, y1 - y0, w.got ? 'rgba(60,196,90,.28)' : 'rgba(79,184,240,.38)');
-    for (let y = y0; y < y1; y += 6) { R(lx, y, 1, 3, '#f6f0e8'); R(lx + 23, y, 1, 3, '#f6f0e8'); }
-    drawPattern(DROP, DROP_C, lx + 10, Math.round(syOf(w.od - 2)) - 3);
-    // mesa
-    const tx = w.side < 0 ? 6 : 160, ty = Math.round(syOf(w.od)) - 10;
-    R(tx + 2, ty + 3, 14, 22, 'rgba(20,40,10,.3)');
-    spr([[tx, ty, 14, 22, '#c88a4a']]); R(tx, ty, 14, 1, '#e8b070');
-    for (let i = 0; i < 6; i++) { const bx = tx + 2 + (i % 2) * 6, by = ty + 2 + Math.floor(i / 2) * 7; R(bx, by, 3, 5, '#4fb8f0'); R(bx, by, 3, 1, '#f6f0e8'); }
-    // placa de aviso uns metros antes
-    const sy = Math.round(syOf(w.od - 14)), sx = w.side < 0 ? 12 : 156;
-    if (sy > TOP - 20 && sy < BOT + 4) {
-      R(sx + 5, sy - 4, 2, 8, OUT);
-      spr([[sx, sy - 16, 12, 12, '#3a8fd0']]); R(sx, sy - 16, 12, 1, '#7ac8f0');
-      drawPattern(DROP, DROP_C, sx + 3, sy - 14);
-    }
-  }
   // decoração das laterais em blocos de 8m: torcida, árvores e arbustos
   for (let k = Math.floor((S.d + 26) / 8); k >= Math.floor((S.d - 10) / 8); k--) {
     const od = k * 8;
     if (crowdZone(od) || od >= BROAD_END) continue;
     const y = Math.round(syOf(od));
     for (const sd of [-1, 1]) {
-      if (S.water.some(w => w.side === sd && Math.abs(w.od - od) < 16)) continue;
       const h = hash(k, sd > 0 ? 401 : 402), jx = Math.round((hash(k, sd > 0 ? 403 : 404) - .5) * 8);
       if (h < .22) for (let i = 0; i < (h < .1 ? 3 : 2); i++) drawFan((sd < 0 ? 3 : 152) + i * 9, y - 4 + (i % 2) * 4, hash(k, 410 + i + sd));
       else if (h < .6) tree((sd < 0 ? 15 : 165) + jx, y);
@@ -2060,7 +2052,7 @@ function drawBikeWorld() {
   for (let n = 1; n <= 8; n++) {
     const y = Math.round(syOf(n * KM10));
     if (y < TOP - 16 || y > BOT + 14) continue;
-    const label = n * 10 + 'KM', w = miniW(label) + 6, x = BRX1 + 6;
+    const label = n * 20 + 'KM', w = miniW(label) + 6, x = BRX1 + 6;
     R(x + Math.floor(w / 2), y - 4, 1, 8, OUT);
     R(x - 1, y - 15, w + 2, 11, OUT); R(x, y - 14, w, 9, '#f6f0e8'); R(x, y - 14, w, 2, '#3cc45a');
     miniTxt(label, x + 3, y - 11, OUT);
@@ -2146,7 +2138,7 @@ function drawBikeTut() {
   ctx.save(); ctx.translate(0, 14); // abaixo do botão de pause
   panel(TOP + 8, 62);
   const TIT = ['PEDALE!', 'HIDRATE!'];
-  const LIN = [['Segure a bike', 'para pedalar'], ['Use as setas e', 'passe no posto']];
+  const LIN = [['Segure a bike', 'para pedalar'], ['Use as setas e', 'pegue a água']];
   txt(tu.done ? 'BOA, PABLO!' : TIT[tu.step], W / 2, TOP + 15, '#ffe23a', 'center');
   if (tu.done) txt('Bora pra largada!', W / 2, TOP + 31, '#fff', 'center');
   else if (tu.wrong > 0) txt('Tente de novo!', W / 2, TOP + 31, '#ff9a6a', 'center');
@@ -2161,7 +2153,7 @@ function drawBikeTut() {
   ctx.restore();
   if (!tu.done && !tu.ok) {
     let b = BBTNS[2];
-    if (tu.step === 1) { const w = S.water[0], near = w.side < 0 ? S.x < BRX0 + 30 : S.x > BRX1 - 30; b = near ? null : BBTNS[w.side < 0 ? 0 : 1]; }
+    if (tu.step === 1) { const w = S.items[0]; b = !w || Math.abs(w.x - S.x) < 6 ? null : BBTNS[w.x < S.x ? 0 : 1]; }
     if (b) hintArrow(Math.round(b.x + b.w / 2));
   }
   if (tu.done > 1) overlay(Math.min(1, (tu.done - 1) / .35));
@@ -2180,21 +2172,18 @@ function drawBikeHUD() {
   chip(2, 2, 64, 12);
   disc(6, 10, 2, OUT); disc(12, 10, 2, OUT); R(6, 10, 1, 1, '#c8cfd9'); R(12, 10, 1, 1, '#c8cfd9');
   R(7, 7, 5, 1, '#e8504a'); R(8, 8, 1, 2, '#e8504a'); R(11, 8, 1, 2, '#e8504a'); R(11, 6, 2, 1, '#c8cfd9');
-  txt((d * BKM).toFixed(1).replace('.', ',') + 'KM', 16, 4, '#fff');
-  // fôlego (gota + barra): azul cheio, amarelo na metade, vermelho piscando no fim
-  drawPattern(DROP, DROP_C, 69, 4);
-  const fx0 = 77, fw = 37, f = Math.round(fw * S.fol);
-  R(fx0 - 1, 4, fw + 2, 9, OUT); R(fx0, 5, fw, 7, '#463a68');
-  if (S.fol >= .25 || Math.floor(T * 6) % 2) {
-    R(fx0, 5, f, 7, S.fol > .5 ? '#4fb8f0' : S.fol > .25 ? '#ffe23a' : '#ff5a4a');
-    R(fx0, 5, f, 1, 'rgba(255,255,255,.5)');
-  }
+  txt(Math.floor(d * BKM + 1e-6) + 'KM', 16, 4, '#fff'); // km inteiro: 3 dígitos não cabem com decimal
+  // energia (gel laranja) e água (gota azul), igual à corrida
+  R(68, 2, 5, 6, OUT); R(69, 3, 3, 4, '#ff9a3a'); R(69, 3, 3, 1, '#ffe23a');
+  resBar(75, 3, 40, S.en, '#ffb02a');
+  R(68, 9, 5, 6, OUT); R(69, 10, 3, 4, '#4fb8f0'); R(70, 9, 1, 1, '#4fb8f0');
+  resBar(75, 10, 40, S.hy, '#4fb8f0');
   // tempo
   chip(118, 2, 60, 12);
   drawStopwatch(120, 3, mode === 'bike' ? S.t : 0);
   txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
-  // percurso: marcas a cada 30km e os postos de água (verde = pegou, cinza = perdeu)
-  drawTrack(d / BGOAL, [1 / 3, 2 / 3], S.water.map(w => [w.od / BGOAL, w.got ? '#3cc45a' : w.miss ? '#8a84a0' : '#4fb8f0']));
+  // percurso: marcas a cada 60km, água e gel que estão por vir
+  drawTrack(d / BGOAL, [1 / 3, 2 / 3], S.items.map(it => [it.od / BGOAL, it.k === 'w' ? '#4fb8f0' : '#ff9a3a']));
 }
 
 function drawBikeScene() {
@@ -2203,11 +2192,8 @@ function drawBikeScene() {
   if (S.shake > 0) ctx.translate(Math.round(rand(-2, 2)), Math.round(rand(-1, 1)));
   drawBikeWorld();
   for (const o of S.obs) if (o.k === 'h') drawHole(o);
+  for (const it of S.items) if (!it.got) drawItem(it);
   for (const o of S.obs) if (o.k === 'b' && syOf(o.od) > TOP - 20 && syOf(o.od) < BOT + 20) drawBikeTop(o.x, syOf(o.od), o.ph, true, o.pal);
-  for (const w of S.water) {
-    const y = Math.round(syOf(w.od)) - 6;
-    if (y > TOP - 16 && y < BOT + 8) drawVolunteer(w.side < 0 ? BRX0 - 6 : BRX1 + 2, y, w.side, !w.got);
-  }
   for (const o of S.obs) if (o.k === 'c') drawDog(o);
   let ax = S.x, ay = PY;
   if (mode !== 'bwin') {
@@ -2247,8 +2233,8 @@ function drawBikeScene() {
 }
 
 /* ---------- corrida ---------- */
-// 1600m na tela = 21,1km na prova. Mesma pista (BRX0..BRX1) e câmera do ciclismo
-const RGOAL = 1600, RKM = 21.1 / RGOAL, RUN_END = RGOAL + 14;
+// 1600m na tela = 42km na prova. Mesma pista (BRX0..BRX1) e câmera do ciclismo
+const RGOAL = 1600, RKM = 42 / RGOAL, RUN_END = RGOAL + 14;
 const RUN_MODES = ['rentry', 'run', 'rwin'];
 const isRun = () => RUN_MODES.includes(mode);
 // segurar o botão de correr acelera até RVMAX; soltar vai freando. Correr gasta energia, parado recupera
@@ -2260,16 +2246,15 @@ const RBTNS = [
   { k: 'P', x: 132, w: 44, col: '#ff8a3a', lt: '#ffc08a', md: '#e0682a', dk: '#a84a1e' },
 ];
 const RUN_PHR = ['PERNAS DE AÇO!', 'NINGUÉM ME SEGURA!', 'SOU UM GUEPARDO!', 'TÔ VOANDO!', 'NEM SUEI!'];
-const GEL_PH = ['GEL DE MORANGO!', 'ENERGIA!', 'GEL NA VEIA!', 'TURBINADO!'];
 const JOG_SHIRT = ['#3a5fd0', '#3cc45a', '#ffd84a', '#ff8ad8', '#9a6bff', '#f6f0e8', '#4fd0dc'];
 const JOG_HAIR = ['#3a2a20', '#1d1820', '#e8c070', '#8a4a2a', '#c8cfd9'];
 let bestRun = null;
-let ironCount = 0; // quantas vezes o Pablo completou o 70.3 (troféu no menu)
+let ironCount = 0; // quantas vezes o Pablo completou o 140.6 (troféu no menu)
 
 function newRunStage() {
   return {
     d: -2.5, v: 0, x: 90, vx: 0, t: 0, en: 1, hy: 1, obs: [], items: [], held: 0, wine: 0, pt: 0,
-    nextObs: 20, nextRunner: 26, nextPed: 75, nextWater: 55, nextGel: 100, nextWine: 160, ck: 1, half: 0,
+    nextObs: 20, nextRunner: 26, nextPed: 75, nextWater: 55, nextGel: 100, nextBan: 80, nextWine: 160, ck: 2, half: 0, eatT: 0,
     hits: 0, inv: 0, flash: 0, shake: 0, warnE: 0, warnH: 3, hic: 0, hicT: 0, lurch: 0, outE: 0, outH: 0, endT: 0, bub: null,
     ph: 0, step: 0, lastT: -1, fade: 1, pd: 0, fadeOut: 0, kick: 0, aL: 0, aR: 0, tL: 0, tR: 0, breath: 0, done: 0,
   };
@@ -2337,6 +2322,12 @@ function spawnRun() {
     const x = clearX(S.nextGel);
     if (x !== null) S.items.push({ k: 'g', od: S.nextGel, x, got: 0 });
     S.nextGel += rand(120, 180);
+  }
+  // banana inteira: o Pablo come e ganha energia
+  while (S.nextBan < ahead && S.nextBan < RGOAL - 20) {
+    const x = clearX(S.nextBan);
+    if (x !== null) S.items.push({ k: 'b', od: S.nextBan, x, got: 0 });
+    S.nextBan += rand(150, 220);
   }
   // garrafa de vinho: armadilha, deixa o Pablo lento por uns segundos
   while (S.nextWine < ahead && S.nextWine < RGOAL - 30) {
@@ -2411,7 +2402,7 @@ function updateRun(dt) {
   for (const o of S.obs) {
     const dy = Math.abs(o.od - S.d) * PPM, dx = Math.abs(o.x - S.x);
     if (o.k === 'n' && o.f < 1) {
-      // banana voando: sai da mão do corredor e cai uns metros atrás dele
+      // lixo voando (casca ou copo): sai da mão do corredor e cai uns metros atrás dele
       o.f = Math.min(1, o.f + dt / .6);
       o.od = o.sod + (o.tod - o.sod) * o.f; o.x = o.sx + (o.tx - o.sx) * o.f;
       if (o.f >= 1) noise(.06, .08, 1800);
@@ -2426,7 +2417,7 @@ function updateRun(dt) {
           noise(.2, .25, 700); tone(160, .2, 'square', .06, -60);
         } else {
           S.v *= .3; S.vx += (Math.random() < .5 ? -1 : 1) * 110;
-          say('ESCORREGUEI NA BANANA!', '#c8402a');
+          say(o.t === 'c' ? 'ESCORREGUEI NO COPO!' : 'ESCORREGUEI NA CASCA!', '#c8402a');
           tone(1200, .35, 'square', .05, -1000);
         }
       }
@@ -2438,11 +2429,11 @@ function updateRun(dt) {
       o.x += (Math.sin(o.dr) * 6 + (o.wob > 0 ? Math.sin(o.wob * 40) * 30 : 0)) * dt;
       o.x = Math.min(BMAXX, Math.max(BMINX, o.x));
       o.taunt = Math.max(0, o.taunt - dt);
-      // adversário malandro: quando o Pablo chega perto, joga uma banana para trás, na frente dele
+      // adversário malandro: quando o Pablo chega perto, joga a casca da banana ou o copo vazio para trás, na frente dele
       if (o.thr && !o.thrown && !o.hit && o.od - S.d < 22 && o.od - S.d > 12) {
         o.thrown = 1; o.taunt = .9;
         const tx = Math.min(BMAXX - 2, Math.max(BMINX + 2, S.x + rand(-8, 8)));
-        S.obs.push({ k: 'n', od: o.od, x: o.x, sod: o.od, sx: o.x, tod: o.od - rand(3, 5), tx, f: 0, hit: 0 });
+        S.obs.push({ k: 'n', t: Math.random() < .5 ? 'p' : 'c', od: o.od, x: o.x, sod: o.od, sx: o.x, tod: o.od - rand(3, 5), tx, f: 0, hit: 0 });
         tone(500, .12, 'square', .04, 400);
       }
       if (!o.hit && S.inv <= 0 && dy < 9 && dx < 9) {
@@ -2480,6 +2471,10 @@ function updateRun(dt) {
       S.en = Math.min(1, S.en + .4);
       say(pick(GEL_PH), '#d8762a'); splash(S.x, PY - 8, 12, '#ffb35a');
       [659, 880, 1175, 1568].forEach((f, i) => tone(f, .08, 'square', .05, 0, i * .05));
+    } else if (it.k === 'b') {
+      S.en = Math.min(1, S.en + .35); S.eatT = 1.5;
+      say('ESTÔMAGO CHEIO!', '#d8762a'); splash(S.x, PY - 8, 10, '#ffd84a');
+      [523, 659, 523, 784].forEach((f, i) => tone(f, .08, 'square', .05, 0, i * .07));
     } else if (it.k === 'v') {
       S.wine = WINE_T; S.v *= .6; S.hic = 1; S.lurch = .3;
       say(pick(['VINHO É DEPOIS!', 'TÔ VENDO DOIS CONES...', 'O CHÃO TÁ MEXENDO!']), '#8a2a4a');
@@ -2488,12 +2483,18 @@ function updateRun(dt) {
     }
   }
   S.items = S.items.filter(it => !it.got && it.od - S.d > -12);
+  // depois de comer a banana: "ESTOU FORTE!"
+  if (S.eatT > 0 && (S.eatT -= dt) <= 0) {
+    say('ESTOU FORTE!', '#d8762a');
+    for (let i = 0; i < 8; i++) P.push({ x: S.x + rand(-6, 6), y: PY - 12, vx: rand(-20, 20), vy: rand(-34, -14), life: rand(.3, .6), c: i % 2 ? '#ffe23a' : '#fff', bub: 1 });
+    [784, 1046, 1318].forEach((f, i) => tone(f, .1, 'square', .05, 0, i * .07));
+  }
 
-  // a cada km: plaquinha, e de 5 em 5 um aviso
-  if (S.d >= S.ck / RKM && S.ck < 21) {
-    const km = S.ck; S.ck++;
-    if (km % 5 === 0) msg(km === 20 ? 'FALTA 1 KM!' : km + ' KM!', '#ffe23a');
-    if (km % 3 === 0 && (!S.bub || S.bub.age > .9)) say(pick(RUN_PHR));
+  // a cada 2 km: plaquinha, e de 10 em 10 um aviso
+  if (S.d >= S.ck / RKM && S.ck < 42) {
+    const km = S.ck; S.ck += 2;
+    if (km % 10 === 0) msg(km === 40 ? 'FALTAM 2 KM!' : km + ' KM!', '#ffe23a');
+    if (km % 6 === 0 && (!S.bub || S.bub.age > .9)) say(pick(RUN_PHR));
     tone(660, .08, 'square', .05); tone(990, .14, 'square', .05, 0, .08);
   }
   if (!S.half && S.d >= RGOAL / 2) { S.half = 1; msg('PASSOU DA METADE!', '#ffe23a'); }
@@ -2520,7 +2521,7 @@ function updateRunEnd(dt) {
     S.v = Math.max(3, Math.min(S.v, (RUN_END - S.pd) * 2));
     S.pd = Math.min(RUN_END, S.pd + S.v * dt); S.ph += dt * (2 + S.v * .9);
     S.x += (90 - S.x) * Math.min(1, dt * 2);
-    if (S.pd >= RUN_END) { S.done = 1; say('SOU UM IRONMAN!'); [784, 988, 1175, 1568].forEach((f, i) => tone(f, .14, 'square', .05, 0, i * .1)); }
+    if (S.pd >= RUN_END) { S.done = 1; say('EU SOU FINISHER!'); [784, 988, 1175, 1568].forEach((f, i) => tone(f, .14, 'square', .05, 0, i * .1)); }
   } else {
     // comemora um pouco parado e depois sai caminhando pela rua; a tela escurece e vem o show do Belchior
     S.v = 0; S.doneT = (S.doneT || 0) + dt;
@@ -2544,7 +2545,7 @@ function drawCone(x, y, hit) {
   spr([[x - 1, y - 8, 2, 2, '#ff7a1a'], [x - 2, y - 6, 4, 3, '#ff7a1a'], [x - 3, y - 3, 6, 3, '#ff7a1a'], [x - 4, y, 9, 2, '#d85a1a']]);
   R(x - 2, y - 5, 4, 1, '#fff'); R(x - 3, y - 2, 6, 1, '#fff'); R(x - 1, y - 8, 1, 2, '#ffb35a');
 }
-// banana inteira (curvinha, pontas marrons) — arremessada pelos adversários
+// banana inteira (curvinha, pontas marrons) — o Pablo come
 const BANANA = [
   '..........bb',
   '.........yYb',
@@ -2554,20 +2555,38 @@ const BANANA = [
   '..yyyyyyy...',
 ];
 const BAN_C = { Y: '#ffd84a', y: '#d8a020', b: '#6a4220' };
-// h = altura do voo (sombra fica no chão); gira enquanto voa
-function drawBanana(x, y, h = 0) {
+// casca de banana aberta no chão (abas para os lados, cabinho marrom)
+const PEEL = [
+  '.....b.....',
+  '....yYy....',
+  '.Yy.yYy.yY.',
+  '..YyYpYyY..',
+  '.yYYpppYYy.',
+  'yY...Y...Yy',
+];
+const PEEL_C = { Y: '#ffd84a', y: '#d8a020', b: '#6a4220', p: '#fff2b0' };
+// lixo jogado pelos adversários: casca de banana ou copo d'água vazio amassado; h = altura do voo
+function drawLitter(o, x, y, h = 0) {
   x = Math.round(x); y = Math.round(y);
-  R(x - 5, y + 2, 12, 2, 'rgba(20,14,30,.3)');
-  const pat = h > 1 && Math.floor(T * 10) % 2 ? flip(BANANA) : BANANA;
-  outlinedPattern(pat, BAN_C, x - 6, y - 3 - Math.round(h), OUT);
+  const hy = y - Math.round(h), spin = h > 1 && Math.floor(T * 10) % 2;
+  R(x - 5, y + 2, 11, 2, 'rgba(20,14,30,.3)');
+  if (o.t === 'c') {
+    // copo deitado: corpo branco, faixa azul, boca aberta mais escura e um amassado
+    const w = spin ? 4 : 8, hh = spin ? 7 : 4;
+    spr([[x - (w >> 1), hy - hh + 1, w, hh, '#f6f0e8']]);
+    if (!spin) { R(x - 1, hy - 3, 2, 4, '#4fb8f0'); R(x + 3, hy - 3, 1, 4, '#cfc6b8'); R(x - 3, hy - 3, 1, 1, '#cfc6b8'); }
+    else R(x - 2, hy - 3, 4, 2, '#4fb8f0');
+    return;
+  }
+  outlinedPattern(spin ? flip(PEEL) : PEEL, PEEL_C, x - 5, hy - 4, OUT);
 }
 // copo d'água, sachê de gel ou garrafa de vinho, flutuando com brilho
 function drawItem(it) {
   const x = Math.round(it.x), y = Math.round(syOf(it.od)) + 4, b = Math.sin(T * 5 + it.od) > 0 ? -1 : 0;
   if (y < TOP - 14 || y > BOT + 10) return;
   if (it.k !== 'v') {
-    // destaque: coluna de luz, anel pulsando no chão e brilho em volta (azul = água, laranja = gel)
-    const hc = it.k === 'w' ? '79,184,240' : '255,154,58', pu = (Math.sin(T * 6 + it.od) + 1) / 2;
+    // destaque: coluna de luz, anel pulsando no chão e brilho em volta (azul = água, laranja = gel, amarelo = banana)
+    const hc = it.k === 'w' ? '79,184,240' : it.k === 'b' ? '255,216,74' : '255,154,58', pu = (Math.sin(T * 6 + it.od) + 1) / 2;
     for (let i = 0; i < 6; i++) { ctx.fillStyle = 'rgba(' + hc + ',' + ((.3 + pu * .12) * (1 - i / 6)) + ')'; ctx.fillRect(x - 3, y - 4 - i * 5, 7, 5); }
     const rr = 6 + Math.round(pu * 4);
     ctx.fillStyle = 'rgba(' + hc + ',' + (1 - pu * .6) + ')';
@@ -2581,6 +2600,8 @@ function drawItem(it) {
   if (it.k === 'w') {
     spr([[x - 2, y - 6 + b, 5, 7, '#f6f0e8']]);
     R(x - 2, y - 6 + b, 5, 2, '#4fb8f0'); R(x - 1, y - 6 + b, 1, 1, '#d6f8ff'); R(x + 2, y - 4 + b, 1, 5, '#cfc6b8');
+  } else if (it.k === 'b') {
+    outlinedPattern(BANANA, BAN_C, x - 6, y - 5 + b, OUT);
   } else if (it.k === 'v') {
     // garrafa verde-escura com rótulo e lacre vinho
     spr([[x - 2, y - 7 + b, 5, 9, '#24502e'], [x - 1, y - 10 + b, 3, 3, '#24502e']]);
@@ -2596,7 +2617,7 @@ function drawRunObs(o) {
   const y = Math.round(syOf(o.od));
   if (y < TOP - 26 || y > BOT + 14) return;
   if (o.k === 'o') drawCone(o.x, y + 4, o.hit);
-  else if (o.k === 'n') drawBanana(o.x, y + 4, Math.sin(o.f * Math.PI) * 14);
+  else if (o.k === 'n') drawLitter(o, o.x, y + 4, Math.sin(o.f * Math.PI) * 14);
   else if (o.k === 'r') {
     drawRunner(o.x, y + 8, o.hair, o.ph, mode === 'run' || mode === 'rwin' ? 1 : 0, 0, o.shirt, 'jog');
     if (o.taunt > 0) txt('TOMA!', o.x, y - 24, '#ffe23a', 'center');
@@ -2637,12 +2658,12 @@ function drawRunRoad(ya, yb, o) {
   }
   R(BRX0 + 3, ya, 2, yb - ya, '#f6f0e8'); R(BRX1 - 5, ya, 2, yb - ya, '#f6f0e8');
   R(BRX0 + 10, ya, 2, yb - ya, '#4a8ae8'); // linha azul do percurso
-  // km pintado no asfalto de 5 em 5
+  // km pintado no asfalto de 10 em 10
   for (let n = 1; n <= 4; n++) {
-    const y = Math.round(syOf(o + n * 5 / RKM));
+    const y = Math.round(syOf(o + n * 10 / RKM));
     if (y < TOP - 20 || y > BOT + 8) continue;
     for (let x = BRX0 + 14; x < BRX1 - 8; x += 6) R(x, y, 3, 2, '#f6f0e8');
-    const label = n * 5 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
+    const label = n * 10 + 'KM', w = miniW(label, 2), lx = Math.round(90 - w / 2);
     R(lx - 3, y - 16, w + 6, 14, '#5a586a');
     miniTxt(label, lx, y - 13, '#f6f0e8', 2);
   }
@@ -2677,8 +2698,8 @@ function drawRunWorld() {
       else if (h < .8) bush((sd < 0 ? 9 : 171) + jx, y + 3);
     }
   }
-  // placas de km na calçada da direita
-  for (let n = 1; n <= 21; n++) {
+  // placas de km na calçada da direita, de 2 em 2
+  for (let n = 2; n < 42; n += 2) {
     const y = Math.round(syOf(n / RKM));
     if (n / RKM > RGOAL || y < TOP - 16 || y > BOT + 14) continue;
     const label = n + 'KM', w = miniW(label) + 6, x = BRX1 + 3;
@@ -2723,7 +2744,7 @@ function drawRunHUD() {
   chip(118, 2, 60, 12);
   drawStopwatch(120, 3, mode === 'run' ? S.t : 0);
   txt(fmt(S.t), W - 4, 4, '#8ae3de', 'right');
-  drawTrack(d / RGOAL, [5, 10, 15, 20].map(k => k / 21.1), S.items.filter(it => it.k !== 'v').map(it => [it.od / RGOAL, it.k === 'w' ? '#4fb8f0' : '#ff9a3a']));
+  drawTrack(d / RGOAL, [10, 20, 30, 40].map(k => k / 42), S.items.filter(it => it.k !== 'v').map(it => [it.od / RGOAL, it.k === 'w' ? '#4fb8f0' : it.k === 'b' ? '#ffd84a' : '#ff9a3a']));
 }
 // ícone do botão de correr: pictograma de corredor desenhado com membros grossos (3px) entre as juntas,
 // contorno escuro, braço e perna de trás em cinza claro para dar profundidade. Duas poses alternam com a passada
